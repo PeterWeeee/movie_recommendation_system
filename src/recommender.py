@@ -1,19 +1,20 @@
 import numpy as np
 import pickle
 import os
+from typing import Optional
 
 class UserBasedCollaborativeFiltering:
     """
     Hệ thống gợi ý Lọc cộng tác dựa trên Người dùng (User-based Collaborative Filtering).
     Sử dụng phương pháp K-Người láng giềng gần nhất (KNN).
     """
-    def __init__(self, k_neighbors=40):
+    def __init__(self, k_neighbors: int = 40) -> None:
         self.k_neighbors = k_neighbors
-        self.train_matrix = None
-        self.similarity_matrix = None
-        self.user_means = None
+        self.train_matrix: Optional[np.ndarray] = None
+        self.similarity_matrix: Optional[np.ndarray] = None
+        self.user_means: Optional[np.ndarray] = None
 
-    def fit(self, train_matrix, similarity_matrix):
+    def fit(self, train_matrix: np.ndarray, similarity_matrix: np.ndarray) -> None:
         """
         Lưu trữ ma trận huấn luyện và ma trận độ tương đồng đã tính trước.
         """
@@ -27,10 +28,12 @@ class UserBasedCollaborativeFiltering:
         valid_users = user_counts > 0 #mục đích để lấy ra những users đã đánh giá ít nhất một phim
         self.user_means[valid_users] = train_matrix.sum(axis=1)[valid_users] / user_counts[valid_users]
 
-    def predict_rating(self, user_idx, item_idx):
+    def predict_rating(self, user_idx: int, item_idx: int) -> float:
         """
         Dự đoán điểm đánh giá của user_idx cho item_idx bằng công thức trung bình có trọng số.
         """
+        assert self.train_matrix is not None and self.similarity_matrix is not None and self.user_means is not None, \
+            "Model chưa được huấn luyện. Hãy gọi fit() trước."
         # Nếu bộ phim này đã có điểm trong tập Train, trả về điểm đó luôn
         if self.train_matrix[user_idx, item_idx] > 0:
             return self.train_matrix[user_idx, item_idx]
@@ -74,18 +77,18 @@ class MatrixFactorizationSVD:
     Hệ thống gợi ý dựa trên Phân rã ma trận (Matrix Factorization) sử dụng thuật toán SVD.
     Tối ưu hóa các tham số thông qua thuật toán Stochastic Gradient Descent (SGD).
     """
-    def __init__(self, num_factors=20, lr=0.005, reg=0.02, epochs=20):
+    def __init__(self, num_factors: int = 20, lr: float = 0.005, reg: float = 0.02, epochs: int = 20) -> None:
         self.num_factors = num_factors  # Số lượng đặc trưng ẩn (K)
         self.lr = lr                    # Tốc độ học (Learning rate)
         self.reg = reg                  # Hệ số kiểm soát quá khớp (Regularization)
         self.epochs = epochs            # Số vòng lặp huấn luyện
-        self.mu = 0                     # Điểm trung bình toàn bộ hệ thống
-        self.b_u = None                 # Độ lệch (bias) của người dùng
-        self.b_i = None                 # Độ lệch (bias) của bộ phim
-        self.P = None                   # Ma trận đặc trưng người dùng
-        self.Q = None                   # Ma trận đặc trưng bộ phim
+        self.mu: float = 0.0            # Điểm trung bình toàn bộ hệ thống
+        self.b_u: Optional[np.ndarray] = None                 # Độ lệch (bias) của người dùng
+        self.b_i: Optional[np.ndarray] = None                 # Độ lệch (bias) của bộ phim
+        self.P: Optional[np.ndarray] = None                   # Ma trận đặc trưng người dùng
+        self.Q: Optional[np.ndarray] = None                   # Ma trận đặc trưng bộ phim
 
-    def fit(self, train_matrix):
+    def fit(self, train_matrix: np.ndarray) -> None:
         """
         Huấn luyện mô hình tìm ma trận P, Q và các hệ số bias bằng SGD.
         """
@@ -120,18 +123,23 @@ class MatrixFactorizationSVD:
                 self.b_i[i] += self.lr * (err - self.reg * self.b_i[i])
                 
                 # Cập nhật hai ma trận đặc trưng ẩn P và Q
-                p_temp = self.P[u].copy()
-                self.P[u] += self.lr * (err * self.Q[i] - self.reg * self.P[u])
-                self.Q[i] += self.lr * (err * p_temp - self.reg * self.Q[i])
+                # Tối ưu hóa: Loại bỏ việc dùng .copy() để giảm tiêu hao tài nguyên bộ nhớ
+                p_u = self.P[u]
+                q_i = self.Q[i]
+                
+                self.P[u] += self.lr * (err * q_i - self.reg * p_u)
+                self.Q[i] += self.lr * (err * p_u - self.reg * q_i)
 
-    def predict_rating(self, user_idx, item_idx):
+    def predict_rating(self, user_idx: int, item_idx: int) -> float:
         """
         Dự đoán điểm số dựa trên các tham số ma trận đặc trưng đã học được.
         """
+        assert self.b_u is not None and self.b_i is not None and self.P is not None and self.Q is not None, \
+            "Model chưa được huấn luyện. Hãy gọi fit() trước."
         pred_r_ui = self.mu + self.b_u[user_idx] + self.b_i[item_idx] + np.dot(self.P[user_idx], self.Q[item_idx])
-        return np.clip(pred_r_ui, 1.0, 5.0)
+        return float(np.clip(pred_r_ui, 1.0, 5.0))
     
-    def save_model(self, model_path):
+    def save_model(self, model_path: str) -> None:
         """Lưu toàn bộ trọng số huấn luyện của SVD vào file định dạng pkl"""
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
         with open(model_path, 'wb') as f:
@@ -140,7 +148,7 @@ class MatrixFactorizationSVD:
                 'P': self.P, 'Q': self.Q, 'num_factors': self.num_factors
             }, f)
 
-    def load_model(self, model_path):
+    def load_model(self, model_path: str) -> bool:
         """Tải các trọng số đã lưu lên bộ nhớ máy tính cực nhanh"""
         if os.path.exists(model_path):
             with open(model_path, 'rb') as f:

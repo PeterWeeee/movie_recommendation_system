@@ -1,6 +1,7 @@
 import numpy as np
+from typing import Any
 
-def compute_mae(test_matrix, model):
+def compute_mae(test_matrix: np.ndarray, model: Any) -> float:
     """
     Tính toán sai số tuyệt đối trung bình (Mean Absolute Error - MAE).
     Đo lường độ lệch trung bình giữa điểm dự đoán và điểm thực tế.
@@ -25,9 +26,9 @@ def compute_mae(test_matrix, model):
         absolute_errors.append(error)
         
     # Trả về trung bình cộng của sai số tuyệt đối
-    return np.mean(absolute_errors)
+    return float(np.mean(absolute_errors))
 
-def compute_rmse(test_matrix, model):
+def compute_rmse(test_matrix: np.ndarray, model: Any) -> float:
     """
     Tính toán căn bậc hai của sai số bình phương trung bình (Root Mean Squared Error - RMSE).
     Độ đo này phạt nặng hơn đối với các lỗi dự đoán lệch quá xa so với thực tế.
@@ -49,4 +50,4 @@ def compute_rmse(test_matrix, model):
         squared_errors.append(error_sq)
         
     # Tính trung bình cộng các bình phương rồi lấy căn bậc hai
-    return np.sqrt(np.mean(squared_errors))
+    return float(np.sqrt(np.mean(squared_errors)))

@@ -1,6 +1,6 @@
 import numpy as np
 
-def compute_cosine_similarity(matrix):
+def compute_cosine_similarity(matrix: np.ndarray) -> np.ndarray:
     """
     Tính ma trận độ tương đồng Cosine giữa các dòng (Users).
     Công thức: Sim(A, B) = (A . B) / (||A|| * ||B||)
@@ -19,7 +19,7 @@ def compute_cosine_similarity(matrix):
     # Trả về ma trận độ tương đồng
     return dot_product / (norm_matrix + epsilon)
 
-def compute_pearson_similarity(matrix):
+def compute_pearson_similarity(matrix: np.ndarray) -> np.ndarray:
     """
     Tính ma trận hệ số tương quan Pearson giữa các dòng (Users).
     Chuẩn hóa bằng cách trừ đi điểm trung bình của từng user (chỉ tính các ô đã đánh giá > 0).

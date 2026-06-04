@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 import seaborn as sns
+from typing import Tuple, Optional, Any, Dict
 
 from src.data_loader import load_raw_data, load_movie_titles, get_or_create_processed_matrices, build_user_item_matrix
 from src.similarity import compute_pearson_similarity
@@ -19,7 +20,7 @@ processed_dir = os.path.join(base_dir, 'data', 'processed')
 model_path = os.path.join(base_dir, 'models', 'svd_weights.pkl')
 
 @st.cache_resource
-def load_and_train_system():
+def load_and_train_system() -> Tuple[Optional[pd.DataFrame], Optional[np.ndarray], Optional[np.ndarray], Optional[Dict[int, str]], Optional[Any], Optional[Any]]:
     if not os.path.exists(data_path) or not os.path.exists(item_path):
         return None, None, None, None, None, None
         
@@ -46,8 +47,8 @@ def load_and_train_system():
 
 df_raw, train_matrix, test_matrix, movie_titles, user_cf, svd_model = load_and_train_system()
 
-if df_raw is None:
-    st.error("Thiếu tệp dữ liệu trong thư mục data/raw/!")
+if df_raw is None or train_matrix is None or test_matrix is None or movie_titles is None:
+    st.error(f"Thiếu tệp dữ liệu trong thư mục data/raw/! Vui lòng đảm bảo các file 'u.data' và 'u.item' tồn tại trong {os.path.join(base_dir, 'data', 'raw')}.")
 else:
     st.title("🎬 Hệ Thống Gợi Ý Phim Chuyên Nghiệp")
     st.markdown("---")
@@ -61,6 +62,11 @@ else:
         st.header("Trực Quan Hóa Trạng Thái Dữ Liệu Ở Các Giai Đoạn")
         
         st.subheader("1. Giai đoạn dữ liệu thô ban đầu (Trước xử lý)")
+        
+        @st.cache_data
+        def get_user_counts(df: pd.DataFrame) -> pd.Series:
+            return df['user_id'].value_counts()
+            
         c_raw1, c_raw2 = st.columns(2)
         with c_raw1:
             fig, ax = plt.subplots(figsize=(6, 3))
@@ -70,7 +76,7 @@ else:
         with c_raw2:
             fig, ax = plt.subplots(figsize=(6, 3))
             # Biểu diễn mật độ xem phim theo độ tuổi của tệp u.user (Ví dụ phân tích mở rộng dựa trên lượng rating)
-            user_counts = df_raw['user_id'].value_counts()
+            user_counts = get_user_counts(df_raw)
             sns.histplot(user_counts, bins=30, kde=True, color='purple', ax=ax)
             ax.set_title("Phân Bố Số Lượt Đánh Giá Trên Mỗi Người Dùng")
             ax.set_xlabel("Số lượt đánh giá")
@@ -119,6 +125,9 @@ else:
             st.markdown(f"### Kết quả gợi ý Top {top_n} phim cho **User_ID {user_id}** bằng thuật toán **{algorithm}**:")
             
             model = svd_model if algorithm == "Matrix Factorization (SVD)" else user_cf
+            if model is None:
+                st.error("Mô hình chưa được khởi tạo. Vui lòng kiểm tra dữ liệu đầu vào.")
+                st.stop()
             unviewed_items = np.where(train_matrix[user_idx] == 0)[0]
             
             predicted_ratings = []
@@ -131,7 +140,7 @@ else:
             
             rec_list = []
             for rank, (item_idx, score) in enumerate(top_recommendations, 1):
-                movie_name = movie_titles.get(item_idx + 1, f"Phim ID {item_idx + 1}")
+                movie_name = movie_titles.get(int(item_idx) + 1, f"Phim ID {int(item_idx) + 1}")
                 rec_list.append({
                     "Hạng": rank,
                     "Tên Bộ Phim": movie_name,
