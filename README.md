@@ -16,21 +16,31 @@ movie_recommendation_system/
 │   └── processed/             # Lưu trữ ma trận Train/Test dưới dạng nhị phân (.npy)
 │                              # Giúp hệ thống nạp dữ liệu tức thì, bỏ qua bước đọc file text thô
 │
-├── models/                    # Đóng gói trọng số mô hình SVD (svd_weights.pkl) sau khi học
-│                              # Phục vụ chạy Demo giao diện ngay lập tức không cần huấn luyện lại
+├── models/                    # Lưu trữ các file trọng số (.pkl) của tất cả các mô hình sau khi huấn luyện
 │
 ├── notebooks/                 # Không gian nghiên cứu và trực quan hóa dữ liệu thô
-│   └── 01_data_exploration.ipynb  # File Jupyter Notebook xuất báo cáo đồ thị độ phân giải cao
+│   ├── 01_data_exploration.ipynb      # Xuất báo cáo đồ thị EDA độ phân giải cao
+│   └── 02_library_verification.ipynb # Đối chứng kết quả MAE/RMSE với thư viện scikit-surprise
+│
+├── scripts/                   # Các script thực thi Pipeline
+│   └── train_pipeline.py      # Tiền xử lý dữ liệu, huấn luyện mô hình (SVD, CF, Content-Based) và lưu file .pkl
 │
 ├── src/                       # Thư mục mã nguồn giải thuật cốt lõi
 │   ├── __init__.py
-│   ├── data_loader.py         # Đọc dữ liệu, chia tập Train/Test độc lập và quản lý dữ liệu processed
-│   ├── similarity.py          # Cài đặt thuần toán học Cosine và Pearson Similarity
-│   ├── recommender.py         # Lớp thuật toán User-Based CF (KNN) và Matrix Factorization (SVD) với SGD
+│   ├── data_loader.py         # Đọc dữ liệu thô, chia tập Train/Test và nạp/lưu ma trận dạng numpy
+│   ├── similarity.py          # Cài đặt Cosine, Pearson và Adjusted Cosine Similarity
+│   ├── recommender.py         # Lớp thuật toán User-Based CF, Item-Based CF và Matrix Factorization (SVD)
+│   ├── content_based.py       # Hệ thống gợi ý Content-Based dựa trên TF-IDF
 │   └── evaluation.py          # Trình đo lường sai số hệ thống qua chỉ số toán học MAE và RMSE
 │
-├── app.py                     # Mã nguồn thiết kế giao diện Web tương tác thông minh (Streamlit)
-├── main.py                    # File thực thi kiểm thử hệ thống qua Terminal
+├── tests/                     # Thư mục chứa các tệp Unit Test bằng pytest
+│   ├── test_recommender.py    # Kiểm thử tính đúng đắn của các thuật toán gợi ý
+│   └── test_similarity.py     # Kiểm thử các hàm tính độ tương đồng
+│
+├── app.py                     # Giao diện Web tương tác thông minh (Streamlit), dùng Hybrid Architecture
+├── main.py                    # Ứng dụng gợi ý Terminal-based siêu tốc
+├── production_architecture.md # Tài liệu mô tả kiến trúc hệ thống production
+├── system_principles.md       # Tài liệu mô tả nguyên lý hoạt động các thuật toán
 ├── requirements.txt           # Danh sách quản lý các thư viện phụ thuộc của dự án
 └── .gitignore                 # Tệp cấu hình Git để loại bỏ các tệp tin rác và dữ liệu nặng khi lên GitHub
 ```
@@ -77,7 +87,15 @@ data/raw/u.data
 data/raw/u.item
 ```
 
-### Bước 5: Chạy ứng dụng
+### Bước 5: Huấn luyện Mô hình (Bắt buộc chạy lần đầu)
+
+Chạy pipeline để hệ thống tự động xử lý dữ liệu và xuất các mô hình học máy ra thư mục `models/`:
+
+```bash
+python scripts/train_pipeline.py
+```
+
+### Bước 6: Chạy ứng dụng
 
 **Chạy giao diện Web (Streamlit):**
 
@@ -93,20 +111,39 @@ Truy cập trình duyệt tại: `http://localhost:8501`
 python main.py
 ```
 
+**Chạy Unit Test:**
+
+```bash
+python -m pytest tests/ -v
+```
+
 ## 4. Các Thuật Toán Được Cài Đặt
 
 | Thuật toán | Mô tả |
 |---|---|
-| **User-Based Collaborative Filtering (KNN)** | Tìm K người dùng có sở thích tương đồng nhất (Pearson Similarity) và dự đoán điểm số |
-| **Matrix Factorization (SVD + SGD)** | Phân rã ma trận User-Item thành các nhân tử ẩn, huấn luyện bằng Stochastic Gradient Descent |
+| **User-Based Collaborative Filtering** | Tìm K người dùng có sở thích tương đồng nhất (Pearson Similarity) và dự đoán điểm số theo công thức KNN with Biased Baseline |
+| **Item-Based Collaborative Filtering** | Đánh giá độ tương đồng giữa các phim (Adjusted Cosine Similarity), dự đoán theo KNN with Biased Baseline |
+| **Matrix Factorization (SVD + SGD)** | Phân rã ma trận User-Item thành các nhân tử ẩn (latent factors), huấn luyện bằng Stochastic Gradient Descent với L2 Regularization |
+| **Content-Based Filtering** | Phân tích thể loại phim bằng TF-IDF và tính khoảng cách Cosine để tìm phim tương đồng về nội dung |
 
-## 5. Chức Năng Giao Diện
+## 5. Kết Quả Đánh Giá (MovieLens 100k — Test Set 20%)
 
-- 📊 **Tab 1 — Trực Quan Hóa**: So sánh phân phối dữ liệu trước và sau xử lý, heatmap ma trận tương đồng
-- 🎯 **Tab 2 — Gợi Ý Phim**: Nhập User ID, chọn thuật toán, nhận Top-N phim được gợi ý
-- 📈 **Tab 3 — Đánh Giá Hiệu Năng**: So sánh chỉ số MAE và RMSE giữa các thuật toán trên tập Test
+| Thuật toán | RMSE | MAE |
+|---|---|---|
+| User-Based CF (KNN Biased Baseline) | 0.9261 | 0.7262 |
+| Item-Based CF (KNN Biased Baseline) | 0.9146 | 0.7189 |
+| Matrix Factorization SVD | 0.9362 | 0.7407 |
 
-## 6. Thư Viện Sử Dụng
+> Đối chiếu tham khảo từ thư viện `scikit-surprise` (notebook `02_library_verification.ipynb`):
+> KNNBaseline User-Based: RMSE 0.9197 / MAE 0.7190 — KNNBaseline Item-Based: RMSE 0.9169 / MAE 0.7188
+
+## 6. Chức Năng Giao Diện
+
+- 📊 **Tab 1 — Trực Quan Hóa**: Biểu đồ độ thưa thớt dữ liệu (Sparsity), hiện tượng Long-Tail, và không gian đặc trưng ẩn 2D của SVD (PCA)
+- 🎯 **Tab 2 — Gợi Ý Phim**: Nhập User ID, chọn thuật toán (User-Based / Item-Based / SVD / Content-Based), nhận Top-N phim được gợi ý
+- 📈 **Tab 3 — Đánh Giá Hiệu Năng**: So sánh chỉ số MAE và RMSE giữa các thuật toán trên tập Test, biểu đồ Overfitting Tracking của SVD
+
+## 7. Thư Viện Sử Dụng
 
 Xem chi tiết tại [`requirements.txt`](requirements.txt):
 
@@ -115,3 +152,5 @@ Xem chi tiết tại [`requirements.txt`](requirements.txt):
 - `streamlit` — Xây dựng giao diện Web tương tác
 - `matplotlib` — Vẽ biểu đồ trực quan hóa
 - `seaborn` — Biểu đồ thống kê nâng cao
+- `scikit-learn` — PCA để trực quan hóa latent features của SVD
+- `scikit-surprise` — Thư viện đối chứng kết quả thuật toán (notebook verification)
