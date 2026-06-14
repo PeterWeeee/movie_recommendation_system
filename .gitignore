@@ -2,3 +2,8 @@ __pycache__/
 .venv/
 venv/
 .vscode/
+pyrightconfig.json
+data/processed/
+models/
+*.pkl
+*.npy
