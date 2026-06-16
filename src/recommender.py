@@ -223,8 +223,8 @@ class ItemBasedCollaborativeFiltering:
             if sim_sum > 0:
                 if self.prediction_mode == 'biased_baseline' and self.baseline_predictor is not None:
                     assert self.baseline_predictor.b_u is not None and self.baseline_predictor.b_i is not None
-                    b_ui = self.baseline_predictor.mu + self.baseline_predictor.b_u[user_idx] + self.baseline_predictor.b_i[item]
-                    b_uj = self.baseline_predictor.mu + self.baseline_predictor.b_u[user_idx] + self.baseline_predictor.b_i[rated_items[top_k_idx]]
+                    b_ui = float(np.clip(self.baseline_predictor.mu + self.baseline_predictor.b_u[user_idx] + self.baseline_predictor.b_i[item], 1.0, 5.0))
+                    b_uj = np.clip(self.baseline_predictor.mu + self.baseline_predictor.b_u[user_idx] + self.baseline_predictor.b_i[rated_items[top_k_idx]], 1.0, 5.0)
                     rating_diffs = top_ratings - b_uj
                     preds[idx] = b_ui + (np.sum(top_sims * rating_diffs) / sim_sum)
                 else:
@@ -232,7 +232,7 @@ class ItemBasedCollaborativeFiltering:
             else:
                 if self.prediction_mode == 'biased_baseline' and self.baseline_predictor is not None:
                     assert self.baseline_predictor.b_u is not None and self.baseline_predictor.b_i is not None
-                    preds[idx] = self.baseline_predictor.mu + self.baseline_predictor.b_u[user_idx] + self.baseline_predictor.b_i[item]
+                    preds[idx] = float(np.clip(self.baseline_predictor.mu + self.baseline_predictor.b_u[user_idx] + self.baseline_predictor.b_i[item], 1.0, 5.0))
                 else:
                     preds[idx] = 3.0
         return np.clip(preds, 1.0, 5.0)

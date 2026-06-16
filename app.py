@@ -64,13 +64,13 @@ st.markdown("---")
 tab1, tab2, tab3 = st.tabs(["📊 Trực Quan Hóa Dữ Liệu", "🎯 Gợi Ý Phim", "📈 Đánh Giá Hiệu Năng"])
 
 # ==========================================
-# TAB 1: TRỰC QUAN HÓA TRƯỚC VÀ SAU XỬ LÝ
+# TAB 1: TRỰC QUAN HÓA CƠ CHẾ HOẠT ĐỘNG
 # ==========================================
 with tab1:
-    st.header("Khám Phá Các Đặc Trưng Ẩn & Vấn Đề Của Hệ Thống Gợi Ý")
+    st.header("Khám Phá Cơ Chế Các Thuật Toán Gợi Ý")
     
-    st.subheader("1. Vấn đề cốt lõi: Độ thưa thớt và Đuôi dài (Long-Tail)")
-    st.markdown("Trong thực tế, một người dùng chỉ xem một lượng rất nhỏ phim, dẫn đến ma trận dữ liệu khổng lồ nhưng lại hầu như trống rỗng. Thêm vào đó, hầu hết các đánh giá tập trung vào một số ít phim bom tấn (Phần đầu biểu đồ), trong khi hàng ngàn phim khác hiếm khi được xem (Phần đuôi).")
+    st.subheader("1. Tại sao cần thuật toán? (Vấn đề dữ liệu thưa thớt)")
+    st.markdown("Ma trận đánh giá thực tế thường rất khổng lồ nhưng lại trống rỗng (Sparsity) do một người chỉ xem rất ít phim. Hầu hết đánh giá dồn vào số ít phim bom tấn (hiện tượng Long-Tail).")
     
     c_prob1, c_prob2 = st.columns(2)
     with c_prob1:
@@ -80,9 +80,9 @@ with tab1:
         
         fig, ax = plt.subplots(figsize=(6, 4))
         ax.pie([nonzero_elements, total_elements - nonzero_elements], 
-               labels=['Ô có dữ liệu đánh giá', 'Ô trống (Chưa xem)'], 
+               labels=['Có đánh giá', 'Trống (Chưa xem)'], 
                autopct='%1.1f%%', colors=['#ff9999','#66b3ff'], startangle=90, explode=(0.1, 0))
-        ax.set_title(f"Mức Độ Thưa Thớt Của Ma Trận (Sparsity: {sparsity:.2f}%)")
+        ax.set_title(f"Mức Độ Thưa Thớt (Sparsity: {sparsity:.2f}%)")
         st.pyplot(fig)
         
     with c_prob2:
@@ -90,42 +90,66 @@ with tab1:
         movie_rating_counts = df_raw['item_id'].value_counts().values
         ax.plot(movie_rating_counts, color='green', linewidth=2)
         ax.fill_between(range(len(movie_rating_counts)), movie_rating_counts, color='green', alpha=0.3)
-        ax.set_title("Hiện tượng Đuôi Dài (Long-Tail) trong đánh giá phim")
-        ax.set_xlabel("Các bộ phim (Sắp xếp theo độ phổ biến giảm dần)")
+        ax.set_title("Hiện tượng Đuôi Dài (Long-Tail)")
         ax.set_ylabel("Số lượng đánh giá")
+        ax.set_xticks([])
         ax.grid(alpha=0.3)
         st.pyplot(fig)
         
     st.markdown("---")
-    st.subheader("2. Mô hình SVD học được gì? (Giải mã Đặc Trưng Ẩn - Latent Features)")
-    st.markdown("Matrix Factorization phân rã ma trận thưa thớt trên thành 2 ma trận nhỏ hơn: **User Features** và **Item Features**. Dưới đây, chúng ta sử dụng PCA để nén 20 chiều đặc trưng của các bộ phim xuống còn 2 chiều để trực quan hóa xem máy học đã phân cụm các bộ phim như thế nào (dù không hề biết thể loại của chúng)!")
     
-    # Lấy top 100 phim phổ biến nhất để vẽ
+    st.subheader("2. Lọc Cộng Tác (Collaborative Filtering): Tìm hàng xóm như thế nào?")
+    st.markdown("Thuật toán KNN xác định sự tương đồng bằng cách so sánh các hàng (hoặc cột) trong ma trận. Đồ thị dưới đây là **Ma trận tương đồng (Cosine Similarity)** của 15 người dùng đầu tiên. Các ô càng đậm màu thể hiện hai người dùng đó càng có gu phim giống nhau!")
+    
+    @st.cache_data
+    def get_sim_matrix(_matrix, n_users):
+        from sklearn.metrics.pairwise import cosine_similarity
+        return cosine_similarity(_matrix[:n_users])
+
+    c_knn1, c_knn2 = st.columns([1.5, 1])
+    with c_knn1:
+        subset_users = min(15, train_matrix.shape[0])
+        sim_matrix = get_sim_matrix(train_matrix, subset_users)
+        
+        fig_sim, ax_sim = plt.subplots(figsize=(6, 5))
+        sns.heatmap(sim_matrix, annot=False, cmap="Blues", ax=ax_sim,
+                    xticklabels=[f"U{i+1}" for i in range(subset_users)],
+                    yticklabels=[f"U{i+1}" for i in range(subset_users)])
+        ax_sim.set_title("Heatmap Tương Đồng Giữa Người Dùng")
+        st.pyplot(fig_sim)
+    with c_knn2:
+        st.info("💡 **Cách hoạt động:** Khi dự đoán phim cho User 1, thuật toán sẽ tìm hàng chứa User 1, xem cột nào (User khác) có màu xanh đậm nhất. Đó chính là hàng xóm của họ. Hệ thống sẽ lấy các phim mà hàng xóm thích để gợi ý cho User 1.")
+        
+    st.markdown("---")
+    
+    st.subheader("3. Matrix Factorization (SVD): Học các Đặc trưng ẩn")
+    st.markdown("Thuật toán SVD nén ma trận khổng lồ thành các Đặc trưng ẩn (Latent Features). Máy tính tự học các đặc trưng toán học trừu tượng đại diện cho khuynh hướng phim (ví dụ: mức độ u ám, độ phức tạp cốt truyện...) chứ không có tên gọi cụ thể. Đồ thị dưới đây nén 20 chiều đặc trưng xuống còn 2 chiều (Thành phần chính 1 và 2) để trực quan hóa sự phân cụm của Top 100 bộ phim phổ biến.")
+    
+    @st.cache_data
+    def get_pca_data(_q_matrix, _movies):
+        from sklearn.decomposition import PCA
+        q_subset = _q_matrix[_movies]
+        return PCA(n_components=2).fit_transform(q_subset)
+
     top_100_movies = df_raw['item_id'].value_counts().head(100).index.values
     if svd_model is not None and getattr(svd_model, 'Q', None) is not None:
-        top_100_Q = svd_model.Q[top_100_movies]
+        q_pca = get_pca_data(svd_model.Q, top_100_movies)
         
-        from sklearn.decomposition import PCA
-        pca = PCA(n_components=2)
-        q_pca = pca.fit_transform(top_100_Q)
+        fig, ax = plt.subplots(figsize=(10, 5))
+        scatter = ax.scatter(q_pca[:, 0], q_pca[:, 1], alpha=0.6, c=q_pca[:, 0], cmap='viridis', s=80, edgecolors='w')
         
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.scatter(q_pca[:, 0], q_pca[:, 1], alpha=0.6, c='purple', s=50)
-        
-        # Hiển thị ngẫu nhiên tên của một số bộ phim trong top 100
         np.random.seed(42)
-        sample_indices = np.random.choice(100, 20, replace=False)
+        sample_indices = np.random.choice(100, 15, replace=False)
         for idx in sample_indices:
             movie_id = top_100_movies[idx]
             movie_name = movie_titles.get(int(movie_id), f"Phim {movie_id}")
-            # Rút gọn tên phim nếu quá dài
-            short_name = movie_name[:20] + "..." if len(movie_name) > 20 else movie_name
-            ax.annotate(short_name, (q_pca[idx, 0], q_pca[idx, 1]), xytext=(5, 5), textcoords='offset points', fontsize=9, alpha=0.8)
+            short_name = movie_name[:25] + "..." if len(movie_name) > 25 else movie_name
+            ax.annotate(short_name, (q_pca[idx, 0], q_pca[idx, 1]), xytext=(5, 5), textcoords='offset points', fontsize=9)
             
-        ax.set_title("Không Gian Đặc Trưng Ẩn 2D Của Top 100 Phim Phổ Biến (SVD + PCA)")
-        ax.set_xlabel("Đặc trưng ẩn 1 (PCA Component 1)")
-        ax.set_ylabel("Đặc trưng ẩn 2 (PCA Component 2)")
-        ax.grid(True, linestyle='--', alpha=0.5)
+        ax.set_title("Không Gian Đặc Trưng Ẩn 2D Của Top 100 Phim Phổ Biến")
+        ax.set_xlabel("Thành phần chính 1 (Đặc trưng tác động mạnh nhất)")
+        ax.set_ylabel("Thành phần chính 2 (Đặc trưng tác động thứ 2)")
+        ax.grid(True, linestyle='--', alpha=0.3)
         st.pyplot(fig)
 
 # ==========================================
