@@ -38,18 +38,18 @@ Thuật toán dựa trên nguyên lý: *Những người từng có chung sở t
 
 ---
 
-## 3. Quy Trình Phục Vụ (Inference Pipeline)
+## 3. Quy Trình Phục Vụ (Inference Pipeline) & Trải Nghiệm Người Dùng
 
-Khi người dùng (Ví dụ: `User ID = 1`) truy cập hệ thống và yêu cầu gợi ý Top 5 bộ phim:
+Khi hệ thống vận hành trên giao diện Web App, luồng xử lý được tối ưu như sau:
 
-1. **Kiểm tra Cold Start**:
-   - Nếu `User ID` không tồn tại trong tập huấn luyện (Người dùng mới), hệ thống sẽ không thể áp dụng thuật toán SVD hay KNN do thiếu dữ liệu. Hệ thống tự động kích hoạt **Popularity-Based** (Gợi ý phim phổ biến nhất toàn sàn).
-2. **Lọc phim đã xem**:
-   - Hệ thống đối chiếu hàng `User ID = 1` trong ma trận Train. Mọi bộ phim đã có điểm đánh giá (khác 0) sẽ bị loại bỏ khỏi danh sách cân nhắc.
-3. **Chấm điểm dự kiến (Predict Rating)**:
-   - Các bộ phim chưa xem còn lại sẽ được đưa qua mô hình học máy (ví dụ: SVD). Mô hình tính tích vô hướng (Dot Product) giữa vector đặc trưng của User 1 và vector đặc trưng của bộ phim, cộng với hệ số Bias để sinh ra điểm dự kiến (từ 1 đến 5 sao).
-4. **Sắp xếp và Trả về**:
-   - Danh sách được sắp xếp giảm dần theo điểm dự kiến. Top 5 bộ phim cao điểm nhất được lấy ra, truy vấn ngược lại file `u.item` để lấy tên phim và hiển thị ra giao diện Web.
+1. **Gợi ý Cá Nhân Hóa (Dành Cho Bạn)**:
+   - Sử dụng **SVD (Matrix Factorization)**: Đối với người dùng cũ, hệ thống tính toán điểm số dự kiến cho các phim chưa xem dựa trên ma trận đặc trưng ẩn và trả về top các bộ phim có điểm dự đoán cao nhất.
+2. **Kiểm tra Cold Start (Đang Thịnh Hành)**:
+   - Nếu User là người dùng mới (chưa có lịch sử), hệ thống kích hoạt gợi ý **Phim Thịnh Hành**. Thay vì chỉ đếm lượt xem thô, hệ thống trích xuất **Biased Predictor** từ thuật toán Item-Based CF. Các phim được xếp hạng dựa trên chất lượng nội tại (Item Bias $b_i$) và phải có trên 50 lượt đánh giá để đảm bảo độ tin cậy.
+3. **Khám Phá Phim Tương Tự (Item-to-Item)**:
+   - Khi người dùng muốn tìm phim giống với phim họ đang xem, hệ thống tra cứu trực tiếp **Ma trận tương đồng (Similarity Matrix)** của mô hình **Item-Based CF**. Phương pháp này hiệu quả vì nó tìm ra các phim có xu hướng được đánh giá giống nhau bởi tập thể người dùng, thay vì chỉ dựa vào nội dung (như Content-Based).
+4. **Lọc phim đã xem**:
+   - Hệ thống luôn đối chiếu với ma trận dữ liệu Train để đảm bảo các bộ phim hiển thị trong mục "Dành cho bạn" đều là phim mới đối với User đó.
 
 ---
 
