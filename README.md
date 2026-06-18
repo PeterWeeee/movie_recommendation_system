@@ -139,9 +139,11 @@ python -m pytest tests/ -v
 
 ## 6. Chức Năng Giao Diện
 
-- 📊 **Tab 1 — Trực Quan Hóa**: Biểu đồ độ thưa thớt dữ liệu (Sparsity), hiện tượng Long-Tail, và không gian đặc trưng ẩn 2D của SVD (PCA)
-- 🎯 **Tab 2 — Gợi Ý Phim**: Nhập User ID, chọn thuật toán (User-Based / Item-Based / SVD / Content-Based), nhận Top-N phim được gợi ý
-- 📈 **Tab 3 — Đánh Giá Hiệu Năng**: So sánh chỉ số MAE và RMSE giữa các thuật toán trên tập Test, biểu đồ Overfitting Tracking của SVD
+- 🏠 **Trang Chủ (Khám Phá)**: Trải nghiệm ứng dụng thực tế với danh sách phim "Dành Cho Bạn" (cá nhân hóa bằng SVD), "Đang Thịnh Hành" (dựa trên chất lượng nội tại từ Biased Predictor), và tìm kiếm "Phim Tương Tự" (Item-Based CF). Tích hợp TMDB API để hiển thị ảnh bìa phim trực quan, sinh động.
+- ⚙️ **Dành Cho Developer**: Không gian phân tích kỹ thuật chuyên sâu với 3 tab:
+  - 📊 **Trực Quan Hóa Dữ Liệu**: Biểu đồ độ thưa thớt (Sparsity), hiện tượng Long-Tail, và không gian đặc trưng ẩn 2D của SVD (PCA).
+  - 📈 **Đánh Giá Hiệu Năng**: Đồ thị Training Loss của SVD và bảng so sánh MAE/RMSE giữa các thuật toán.
+  - 🧪 **So Sánh Thuật Toán**: So sánh song song top phim gợi ý từ các thuật toán khác nhau (User-Based, Item-Based, SVD) cho cùng một User.
 
 ## 7. Thư Viện Sử Dụng
 

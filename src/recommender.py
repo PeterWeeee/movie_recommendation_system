@@ -44,6 +44,11 @@ class BiasedPredictor:
         pred = self.mu + self.b_u[user_idx] + self.b_i[item_idx]
         return float(np.clip(pred, 1.0, 5.0))
 
+    def predict_batch(self, user_idx: int, item_indices: np.ndarray) -> np.ndarray:
+        assert self.b_u is not None and self.b_i is not None, "Mô hình chưa được huấn luyện!"
+        preds = self.mu + self.b_u[user_idx] + self.b_i[item_indices]
+        return np.clip(preds, 1.0, 5.0)
+
 
 class UserBasedCollaborativeFiltering:
     """
