@@ -1,0 +1,1308 @@
+rô<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slide Báo Cáo - Hệ thống gợi ý phim MovieLens</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Montserrat:wght@500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        /* ================= VARIABLES ================= */
+        :root {
+            --bg-color: #0B132B;
+            --card-bg: #1C2541;
+            --accent-cyan: #00D1FF;
+            --accent-yellow: #FFC857;
+            --text-main: #F5F7FA;
+            --text-sub: #B8C1CC;
+            --alert-red: #FF6B6B;
+        }
+
+        /* ================= BASE STYLES ================= */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            background-color: #050914;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Be Vietnam Pro', sans-serif;
+            color: var(--text-main);
+            overflow: hidden;
+        }
+
+        /* ================= PRESENTATION WRAPPER ================= */
+        .presentation-wrapper {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at top right, rgba(0, 209, 255, 0.05), transparent 50%),
+                              radial-gradient(circle at bottom left, rgba(255, 200, 87, 0.05), transparent 50%);
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+        }
+
+        /* ================= SLIDES ================= */
+        .slide {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            padding: 50px 70px;
+            display: flex;
+            flex-direction: column;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.4s ease-in-out;
+            z-index: 1;
+        }
+
+        .slide.active {
+            opacity: 1;
+            visibility: visible;
+            z-index: 10;
+        }
+
+        /* ================= TYPOGRAPHY ================= */
+        h1, h2, h3 { font-family: 'Montserrat', sans-serif; }
+        
+        .slide-title {
+            font-size: 38px;
+            font-weight: 700;
+            margin-bottom: 25px;
+            border-left: 6px solid var(--accent-cyan);
+            padding-left: 20px;
+            color: var(--text-main);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .slide-title span { color: var(--accent-yellow); }
+
+        p, li { font-size: 18px; line-height: 1.6; color: var(--text-sub); }
+        strong { color: var(--text-main); font-weight: 600; }
+        .text-cyan { color: var(--accent-cyan) !important; font-weight: 600; }
+        .text-yellow { color: var(--accent-yellow) !important; font-weight: 600; }
+        .text-red { color: var(--alert-red) !important; font-weight: 600; }
+
+        /* ================= LAYOUTS ================= */
+        .content { display: flex; flex-direction: column; flex-grow: 1; justify-content: center; height: 100%; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; height: 100%; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+        
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid rgba(0, 209, 255, 0.15);
+            padding: 25px;
+        }
+        .card-full-height { display: flex; flex-direction: column; height: 100%; }
+
+        ul.custom-list { list-style: none; padding-left: 10px; }
+        ul.custom-list li { position: relative; padding-left: 30px; margin-bottom: 12px; }
+        ul.custom-list li::before { content: '▹'; position: absolute; left: 0; color: var(--accent-cyan); font-size: 22px; top: -2px; }
+
+        /* ================= SPECIAL ELEMENTS ================= */
+        .math-box {
+            background: rgba(11, 19, 43, 0.9);
+            border-left: 4px solid var(--accent-yellow);
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-cyan);
+            font-size: 20px;
+            margin: 15px 0;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
+            overflow-x: auto;
+            text-align: left;
+            line-height: 1.5;
+        }
+        
+        .code-block {
+            background: #050914;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            color: #A0B3C6;
+            font-size: 15px;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+
+        /* Tables */
+        .table-modern { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 12px; overflow: hidden; margin-bottom: 15px; }
+        .table-modern th, .table-modern td { padding: 12px 15px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .table-modern th { background-color: rgba(0, 209, 255, 0.1); color: var(--accent-cyan); font-weight: 700; font-size: 18px; }
+        .table-modern tr:last-child td { border-bottom: none; }
+
+        /* Images */
+        .img-wrapper {
+            width: 100%; height: 100%; border-radius: 12px; overflow: hidden;
+            border: 1px solid rgba(255, 200, 87, 0.3); background: #000;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .img-wrapper img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+        /* EDA Image Strip */
+        .eda-strip { display: flex; gap: 15px; height: 220px; margin-top: 15px; }
+        .eda-item { flex: 1; background: var(--card-bg); border-radius: 8px; padding: 10px; border: 1px solid rgba(0,209,255,0.2); display: flex; flex-direction: column; align-items: center; }
+        .eda-item img { max-width: 100%; max-height: 160px; object-fit: contain; background: #fff; border-radius: 4px; }
+        .eda-item p { font-size: 14px; text-align: center; margin-top: 8px; color: var(--accent-cyan); line-height: 1.2; }
+
+        /* Flowchart */
+        .flow-box { text-align: center; background: var(--card-bg); border: 1px solid var(--accent-cyan); padding: 12px; border-radius: 8px; font-weight: 600; color: #fff; margin: 5px auto; width: 90%; }
+        .flow-arrow { text-align: center; color: var(--accent-yellow); font-size: 20px; margin: 2px 0; }
+        
+        /* UI CONTROLS */
+        .controls {
+            position: absolute; bottom: 20px; right: 30px;
+            display: flex; gap: 15px; z-index: 100; align-items: center;
+        }
+        .btn-nav {
+            background: rgba(28, 37, 65, 0.9); border: 1px solid var(--accent-cyan); color: var(--accent-cyan);
+            width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s; font-size: 18px;
+        }
+        .btn-nav:hover { background: var(--accent-cyan); color: #000; }
+        
+        .btn-text {
+            background: transparent; border: 1px solid var(--accent-yellow); color: var(--accent-yellow);
+            padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s;
+        }
+        .btn-text:hover { background: var(--accent-yellow); color: #000; }
+
+        .footer-info {
+            position: absolute; bottom: 20px; left: 70px;
+            font-size: 14px; color: rgba(255,255,255,0.3); z-index: 100;
+        }
+        
+        .progress-bar {
+            position: absolute; bottom: 0; left: 0; height: 4px; background: var(--accent-cyan);
+            transition: width 0.3s ease; z-index: 100;
+        }
+
+        /* SPEAKER NOTES */
+        #speakerNotesPanel {
+            position: absolute; bottom: 80px; right: 30px; width: 450px; max-height: 400px;
+            background: rgba(11, 19, 43, 0.95); border: 1px solid var(--accent-yellow);
+            border-radius: 12px; padding: 20px; color: var(--text-main); font-size: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8); z-index: 200; display: none;
+            overflow-y: auto; backdrop-filter: blur(10px);
+        }
+        #speakerNotesPanel h4 { color: var(--accent-yellow); margin-bottom: 10px; border-bottom: 1px solid rgba(255,200,87,0.3); padding-bottom: 5px; }
+
+        /* Utility */
+        .text-center { text-align: center; }
+        .mb-20 { margin-bottom: 20px; }
+        .mt-20 { margin-top: 20px; }
+
+        /* ================= PRINT STYLES ================= */
+        @media print {
+            body {
+                background-color: #050914 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                overflow: visible !important;
+                height: auto !important;
+                display: block !important;
+            }
+            .presentation-wrapper {
+                width: 1280px !important;
+                height: auto !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                overflow: visible !important;
+                position: static !important;
+            }
+            .slide {
+                position: relative !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+                display: flex !important;
+                page-break-after: always !important;
+                break-after: page !important;
+                height: 720px !important;
+                padding: 50px 70px !important;
+                box-sizing: border-box !important;
+            }
+            /* Hide UI controls and speaker notes during printing */
+            .controls, #speakerNotesPanel, .btn-text, .btn-nav, .progress-bar, .footer-info {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="presentation-wrapper">
+
+    <!-- SLIDE 1 -->
+    <div class="slide active" data-notes="Em xin trình bày đề tài hệ thống gợi ý phim sử dụng bộ dữ liệu MovieLens 100K. Nội dung báo cáo gồm hai phần lớn: phần lý thuyết về Collaborative Filtering, bao gồm Memory-Based và Model-Based; sau đó là phần sản phẩm code của nhóm với các thuật toán đã triển khai, giao diện demo và kết quả so sánh thực nghiệm.">
+        <div style="text-align: center; margin-top: 50px;">
+            <i class="fa-solid fa-film text-cyan" style="font-size: 50px; margin-bottom: 20px; display: inline-block;"></i>
+            <i class="fa-solid fa-network-wired text-yellow" style="font-size: 50px; margin-bottom: 20px; display: inline-block; margin-left: 20px;"></i>
+            <h1 style="font-size: 48px; color: var(--text-main); margin-bottom: 15px; text-shadow: 0 0 20px rgba(0, 209, 255, 0.3);">HỆ THỐNG GỢI Ý PHIM DỰA TRÊN<br><span class="text-cyan">COLLABORATIVE FILTERING</span></h1>
+            <h2 style="font-size: 28px; color: var(--accent-yellow); margin-bottom: 40px; font-weight: 500;">Sử dụng MovieLens 100K</h2>
+            <div style="background: rgba(28, 37, 65, 0.8); display: inline-block; padding: 40px 60px; border-radius: 16px; border: 1px solid rgba(0, 209, 255, 0.2); text-align: left; backdrop-filter: blur(5px);">
+                <p><span class="text-sub">Môn học:</span> <strong>Trí tuệ nhân tạo</strong></p>
+                <p><span class="text-sub">Hướng tiếp cận:</span> <strong>Memory-Based CF + Model-Based CF</strong></p>
+                <p><span class="text-sub">Thuật toán:</span> <strong>User-Based CF, Item-Based CF, Matrix Factorization SVD</strong></p>
+                <p><span class="text-sub">Giao diện demo:</span> <strong>Streamlit Web App</strong></p>
+                <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
+                <p><span class="text-sub">Sinh viên/Nhóm:</span> <span class="text-yellow">Nhóm 1</span></p>
+                <p><span class="text-sub">GV Hướng dẫn:</span> <span class="text-yellow">TS. Bùi Mạnh Quân</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 2 -->
+    <div class="slide" data-notes="Khi số lượng phim quá lớn, người dùng dễ bị quá tải lựa chọn. Hệ thống gợi ý giải quyết vấn đề này bằng cách học từ lịch sử đánh giá và hành vi của người dùng. Trong đề tài này, nhóm chọn MovieLens 100K vì đây là bộ dữ liệu kinh điển trong lĩnh vực recommender system, có đủ rating, user và movie để triển khai các thuật toán lọc cộng tác.">
+        <h2 class="slide-title">Vấn đề và <span>Lý do chọn đề tài</span></h2>
+        <div class="content grid-2">
+            <div class="card card-full-height">
+                <h3 class="text-cyan mb-20">Bài toán đặt ra</h3>
+                <ul class="custom-list">
+                    <li>Người dùng có quá nhiều phim để lựa chọn (hàng nghìn đến hàng triệu nội dung).</li>
+                    <li>Khó tự tìm nội dung phù hợp với sở thích cá nhân.</li>
+                    <li>Hệ thống gợi ý giúp <strong>cá nhân hóa trải nghiệm</strong>.</li>
+                    <li><strong>Collaborative Filtering (CF)</strong> tận dụng hành vi cộng đồng để dự đoán sở thích.</li>
+                    <li>MovieLens 100K là bộ dữ liệu chuẩn, phù hợp học thuật và kiểm thử thuật toán.</li>
+                </ul>
+            </div>
+            <div class="card card-full-height" style="justify-content: center;">
+                <div class="flow-box">Nhiều phim + Nhiều người dùng</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-box" style="border-color: var(--accent-yellow);">Dữ liệu đánh giá (Rating)</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-box" style="border-color: var(--accent-cyan);">Mô hình gợi ý (Recommender)</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-box" style="background: rgba(255, 200, 87, 0.2); border-color: var(--accent-yellow); color: var(--accent-yellow);">Top-N phim phù hợp từng user</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 3 -->
+    <div class="slide" data-notes="Bộ dữ liệu MovieLens 100K gồm 100 nghìn lượt đánh giá của 943 người dùng trên 1682 bộ phim. Mỗi lượt đánh giá có thang điểm từ 1 đến 5 sao. Trong dự án, dữ liệu rating từ file u.data là nguồn chính để xây dựng ma trận User-Item, còn file u.item được dùng để hiển thị tên phim trong kết quả gợi ý.">
+        <h2 class="slide-title">Dữ liệu sử dụng: <span>MovieLens 100K</span></h2>
+        <div class="content">
+            <div class="grid-3 mb-20 text-center">
+                <div class="card" style="padding: 15px;">
+                    <i class="fa-solid fa-star text-yellow" style="font-size: 35px; margin-bottom: 10px;"></i>
+                    <h1 class="text-cyan" style="font-size: 40px;">100,000</h1>
+                    <p>Lượt đánh giá</p>
+                </div>
+                <div class="card" style="padding: 15px;">
+                    <i class="fa-solid fa-users text-cyan" style="font-size: 35px; margin-bottom: 10px;"></i>
+                    <h1 class="text-cyan" style="font-size: 40px;">943</h1>
+                    <p>Người dùng (Users)</p>
+                </div>
+                <div class="card" style="padding: 15px;">
+                    <i class="fa-solid fa-film text-cyan" style="font-size: 35px; margin-bottom: 10px;"></i>
+                    <h1 class="text-cyan" style="font-size: 40px;">1,682</h1>
+                    <p>Bộ phim (Movies)</p>
+                </div>
+            </div>
+            <div class="card">
+                <p class="mb-20"><strong>Thang điểm:</strong> 1 – 5 sao. Mỗi user đánh giá ít nhất <strong>20 ratings</strong>.</p>
+                <p class="text-yellow mb-10">Các file chính trong bộ dữ liệu:</p>
+                <ul class="custom-list">
+                    <li><code class="text-cyan">u.data</code>: Chứa <code>user_id</code>, <code>item_id</code>, <code>rating</code>, <code>timestamp</code> (Dùng xây ma trận).</li>
+                    <li><code class="text-cyan">u.item</code>: Tên phim, ngày phát hành, IMDb URL, 19 thể loại.</li>
+                    <li><code class="text-cyan">u.user</code>: Thông tin nhân khẩu học (tuổi, giới tính, nghề nghiệp).</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 4 -->
+    <div class="slide" data-notes="Nền tảng của Collaborative Filtering là ma trận User-Item. Mỗi hàng là một người dùng, mỗi cột là một bộ phim, và giá trị trong ô là điểm đánh giá. Tuy nhiên, phần lớn người dùng chỉ đánh giá một phần nhỏ số phim nên ma trận có rất nhiều ô trống. Nhiệm vụ của hệ thống là dự đoán các ô còn thiếu đó để đưa ra danh sách phim nên gợi ý.">
+        <h2 class="slide-title">Biểu diễn dữ liệu: <span>User–Item Matrix</span></h2>
+        <div class="content grid-2">
+            <div>
+                <p class="mb-20">Collaborative Filtering bắt đầu từ ma trận tương tác:</p>
+                <div class="math-box text-center" style="font-size: 24px;">R &isin; &#8477;<sup>m &times; n</sup></div>
+                <ul class="custom-list">
+                    <li><strong class="text-cyan">m</strong>: số người dùng (users).</li>
+                    <li><strong class="text-cyan">n</strong>: số phim (items).</li>
+                    <li><strong class="text-yellow">R(u,i)</strong>: rating của user <code>u</code> cho phim <code>i</code>.</li>
+                    <li>Ô chưa có dữ liệu được biểu diễn là <code>0</code> hoặc <code>?</code>.</li>
+                </ul>
+                <div class="card mt-20" style="background: rgba(0, 209, 255, 0.1);">
+                    <p class="text-cyan"><i class="fa-solid fa-bullseye"></i> <strong>Bài toán chính:</strong> Dự đoán giá trị của các ô còn thiếu (?), từ đó chọn ra Top-N phim điểm cao nhất.</p>
+                </div>
+            </div>
+            <div style="display: flex; flex-direction: column; justify-content: center;">
+                <p class="mb-10 text-yellow text-center">Ví dụ minh họa ma trận R:</p>
+                <table class="table-modern">
+                    <tr>
+                        <th>User / Movie</th>
+                        <th>Titanic</th>
+                        <th>Avatar</th>
+                        <th>Matrix</th>
+                    </tr>
+                    <tr>
+                        <td><strong>U1</strong></td>
+                        <td class="text-yellow">5</td>
+                        <td>4</td>
+                        <td class="text-red">?</td>
+                    </tr>
+                    <tr>
+                        <td><strong>U2</strong></td>
+                        <td class="text-yellow">5</td>
+                        <td class="text-yellow">5</td>
+                        <td>4</td>
+                    </tr>
+                    <tr>
+                        <td><strong>U3</strong></td>
+                        <td>1</td>
+                        <td>2</td>
+                        <td class="text-yellow">5</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 5 -->
+    <div class="slide" data-notes="Trong dữ liệu MovieLens, ma trận User-Item rất thưa. Với train matrix của dự án, độ thưa lên đến khoảng 94.96%, nghĩa là phần lớn ô không có rating. Ngoài ra còn có hiện tượng long-tail: chỉ một số ít phim nổi tiếng nhận được nhiều đánh giá, còn rất nhiều phim có ít đánh giá. Đây là lý do cần các thuật toán gợi ý để khai thác thông tin gián tiếp từ cộng đồng người dùng.">
+        <h2 class="slide-title">Vấn đề: <span>Dữ liệu thưa và Long-Tail</span></h2>
+        <div class="content">
+            <div class="grid-2" style="height: 50%;">
+                <div class="card">
+                    <ul class="custom-list">
+                        <li>Không phải user nào cũng xem tất cả phim.</li>
+                        <li>Kích thước train matrix: <strong>943 &times; 1682</strong>.</li>
+                        <li>Độ thưa (Sparsity) train matrix: <strong class="text-red">94.96%</strong>.</li>
+                        <li>Một số phim phổ biến có nhiều rating, phần lớn nằm ở <strong>long-tail</strong> (rất ít rating).</li>
+                    </ul>
+                    <div class="math-box text-center" style="font-size: 16px; margin-top: 10px; padding: 10px;">
+                        Sparsity = 1 - Số rating thực tế / (Users &times; Items)
+                    </div>
+                </div>
+                <div class="img-wrapper">
+                    <img src="streamlit_tab1_sparsity_longtail.png" alt="Sparsity and Long Tail" style="background:#fff;">
+                </div>
+            </div>
+            
+            <div class="eda-strip">
+                <div class="eda-item">
+                    <img src="rating_distribution.png" alt="Rating Distribution">
+                    <p>Rating Distribution (thường 3-4 sao)</p>
+                </div>
+                <div class="eda-item">
+                    <img src="top_10_popular_movies.png" alt="Top Popular Movies">
+                    <p>Top Popular Movies (số ít chiếm ưu thế)</p>
+                </div>
+                <div class="eda-item">
+                    <img src="user_engagement_distribution.png" alt="User Engagement">
+                    <p>User Engagement (đánh giá không đồng đều)</p>
+                </div>
+            </div>
+            <p class="text-center mt-10 text-cyan"><strong>Dữ liệu không đồng đều + ma trận thưa &rarr; Cần Collaborative Filtering để dự đoán.</strong></p>
+        </div>
+    </div>
+
+    <!-- SLIDE 6 -->
+    <div class="slide" data-notes="Collaborative Filtering là phương pháp gợi ý dựa trên hành vi của cộng đồng. Nguyên lý là những người dùng có hành vi tương đồng trong quá khứ có xu hướng thích các sản phẩm tương tự trong tương lai. CF có hai hướng lớn. Hướng thứ nhất là Memory-Based, dựa trực tiếp vào ma trận rating và độ tương đồng. Hướng thứ hai là Model-Based, học một mô hình từ dữ liệu, trong dự án là Matrix Factorization SVD.">
+        <h2 class="slide-title">Collaborative Filtering <span>Là gì?</span></h2>
+        <div class="content grid-2">
+            <div class="card card-full-height">
+                <h3 class="text-cyan mb-20"><i class="fa-solid fa-question-circle"></i> Làm gì?</h3>
+                <ul class="custom-list mb-20">
+                    <li>Dự đoán sở thích dựa trên <strong>lịch sử rating của cộng đồng</strong>.</li>
+                    <li>Không cần phân tích nội dung hay thể loại phim quá chi tiết.</li>
+                </ul>
+                <h3 class="text-yellow mb-20 mt-20"><i class="fa-solid fa-cogs"></i> Làm như thế nào?</h3>
+                <ul class="custom-list">
+                    <li>Tìm user giống nhau hoặc item giống nhau.</li>
+                    <li>Hoặc học các "đặc trưng ẩn" từ ma trận.</li>
+                    <li>Dự đoán rating cho phim chưa xem.</li>
+                    <li>Sắp xếp và lấy Top-N phim cao nhất.</li>
+                </ul>
+            </div>
+            <div class="card card-full-height">
+                <h3 class="text-center mb-20 text-yellow">Phân loại thuật toán chính</h3>
+                <pre class="code-block" style="font-size: 16px; border: none; flex-grow: 1; display:flex; align-items:center;">
+Collaborative Filtering
+├── Memory-Based CF
+│   ├── User-Based CF
+│   └── Item-Based CF
+└── Model-Based CF
+    └── Matrix Factorization / SVD</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 7 -->
+    <div class="slide" data-notes="Không có thuật toán nào tốt nhất trong mọi trường hợp. User-Based phù hợp khi số lượng người dùng vừa phải và cần giải thích kết quả bằng những người dùng tương tự. Item-Based thường ổn định hơn vì item ít thay đổi hơn user. SVD phù hợp khi dữ liệu thưa và cần tốc độ dự đoán nhanh sau huấn luyện. Trong thực tế thường kết hợp nhiều hướng thành Hybrid Recommender.">
+        <h2 class="slide-title">Khi nào dùng <span>Thuật toán nào?</span></h2>
+        <div class="content">
+            <table class="table-modern" style="font-size: 16px;">
+                <tr>
+                    <th style="width: 25%;">Hướng tiếp cận</th>
+                    <th>Nên dùng khi</th>
+                    <th>Không phù hợp khi</th>
+                </tr>
+                <tr>
+                    <td class="text-cyan"><strong>User-Based CF</strong></td>
+                    <td>Số user vừa phải, cần giải thích bằng người dùng tương tự.</td>
+                    <td>Số user quá lớn, cần tính toán realtime nhanh.</td>
+                </tr>
+                <tr>
+                    <td class="text-cyan"><strong>Item-Based CF</strong></td>
+                    <td>Item ổn định hơn user, gợi ý dựa trên "phim tương tự".</td>
+                    <td>Item quá nhiều hoặc có item mới liên tục.</td>
+                </tr>
+                <tr>
+                    <td class="text-yellow"><strong>SVD / Matrix Fact.</strong></td>
+                    <td>Dữ liệu thưa, cần dự đoán nhanh sau huấn luyện.</td>
+                    <td>Cần giải thích đơn giản logic, dữ liệu quá nhỏ.</td>
+                </tr>
+                <tr>
+                    <td class="text-sub"><strong>Content-Based</strong></td>
+                    <td>Có user/item mới, có metadata phim (Cold-start).</td>
+                    <td>Không có thông tin nội dung phim tốt.</td>
+                </tr>
+            </table>
+            <div class="grid-3 mt-20">
+                <div class="card text-center" style="padding: 10px;"><strong>Memory-Based:</strong> Dễ hiểu, giải thích</div>
+                <div class="card text-center" style="padding: 10px;"><strong>Model-Based:</strong> Mở rộng, đoán nhanh</div>
+                <div class="card text-center" style="padding: 10px; border-color: var(--accent-yellow);"><strong>Hybrid:</strong> Thực tế kết hợp</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 8 -->
+    <div class="slide" data-notes="Memory-Based CF được gọi là dựa trên bộ nhớ vì nó sử dụng trực tiếp dữ liệu rating đã lưu để tính toán. Thay vì huấn luyện một mô hình phức tạp, hệ thống tính độ tương đồng giữa user hoặc giữa item, sau đó dùng các láng giềng gần nhất để dự đoán rating. Ưu điểm là dễ hiểu và dễ giải thích, nhưng nhược điểm là chi phí tính toán cao khi dữ liệu tăng lớn.">
+        <h2 class="slide-title">Memory-Based CF: <span>Ý tưởng tổng quát</span></h2>
+        <div class="content grid-2">
+            <div>
+                <p class="mb-20 text-yellow">Dùng trực tiếp ma trận rating để dự đoán.</p>
+                <h3 class="text-cyan mb-20">Quy trình:</h3>
+                <ol class="custom-list" style="list-style-type: decimal; padding-left: 20px;">
+                    <li>Xây dựng ma trận User–Item.</li>
+                    <li>Tính độ tương đồng (Similarity).</li>
+                    <li>Chọn K láng giềng gần nhất.</li>
+                    <li>Dự đoán rating bằng trung bình có trọng số.</li>
+                    <li>Sắp xếp và lấy Top-N.</li>
+                </ol>
+                <div class="card mt-20" style="padding: 15px;">
+                    <p><strong>Hai hướng chính:</strong></p>
+                    <p>- User-Based CF: <em>User giống User</em></p>
+                    <p>- Item-Based CF: <em>Phim giống Phim</em></p>
+                </div>
+            </div>
+            <div class="card card-full-height">
+                <h3 class="text-yellow mb-20 text-center">Đánh giá nhanh</h3>
+                <hr style="border-color: rgba(255,255,255,0.1); margin-bottom: 20px;">
+                <p class="mb-10"><strong class="text-cyan"><i class="fa-solid fa-check"></i> Ưu điểm:</strong></p>
+                <ul class="custom-list mb-20">
+                    <li>Dễ hiểu, dễ giải thích logic.</li>
+                    <li>Không cần huấn luyện mô hình phức tạp.</li>
+                    <li>Có thể triển khai nhanh.</li>
+                </ul>
+                <p class="mb-10"><strong class="text-red"><i class="fa-solid fa-xmark"></i> Nhược điểm:</strong></p>
+                <ul class="custom-list">
+                    <li>Tính toán chậm khi dữ liệu lớn.</li>
+                    <li>Nhạy cảm với dữ liệu thưa thớt.</li>
+                    <li>Gặp khó với Cold-start.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 9 -->
+    <div class="slide" data-notes="Cosine Similarity đo độ giống nhau dựa trên góc giữa hai vector. Nếu hai user có vector rating cùng hướng thì độ tương đồng cao. Phương pháp này đơn giản và tính nhanh, nhưng có một hạn chế là chưa xét đến thói quen chấm điểm của từng người. Ví dụ có người luôn chấm cao, có người luôn chấm thấp, Cosine thuần túy có thể hiểu sai mức độ giống nhau.">
+        <h2 class="slide-title">Similarity: <span>Cosine thuần túy</span></h2>
+        <div class="content grid-2">
+            <div>
+                <p class="mb-20">Đo góc giữa hai vector rating trong không không gian.</p>
+                <div class="math-box">
+                    sim(u,v) = (u &middot; v) / (||u|| &times; ||v||)<br><br>
+                    sim(u,v) = &Sigma; r(u,i)r(v,i) / <br>[ &radic;&Sigma; r(u,i)<sup>2</sup> &times; &radic;&Sigma; r(v,i)<sup>2</sup> ]
+                </div>
+                <p class="mt-20"><strong>Trong đó:</strong></p>
+                <ul class="custom-list">
+                    <li><code>u, v</code>: hai vector user/item.</li>
+                    <li><code>r(u,i)</code>: rating của <code>u</code> cho <code>i</code>.</li>
+                </ul>
+            </div>
+            <div class="card card-full-height">
+                <h3 class="text-yellow mb-20">Ý nghĩa giá trị</h3>
+                <ul class="custom-list">
+                    <li><strong class="text-cyan">sim = 1</strong>: Rất giống nhau.</li>
+                    <li><strong class="text-sub">sim = 0</strong>: Không liên hệ.</li>
+                    <li><strong class="text-red">sim = -1</strong>: Xu hướng đối lập.</li>
+                </ul>
+                <h3 class="text-yellow mb-20 mt-20">Đánh giá</h3>
+                <ul class="custom-list">
+                    <li><strong>Ưu:</strong> Đơn giản, tính nhanh (NumPy).</li>
+                    <li><strong class="text-red">Nhược:</strong> Chưa xử lý người chấm dễ/khó tính.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 10 -->
+    <div class="slide" data-notes="Trong hệ thống gợi ý, rating không chỉ phản ánh sở thích mà còn phản ánh thói quen chấm điểm. Có người rất dễ cho điểm cao, có người lại rất khắt khe. Ngoài ra có phim hot được nhiều người đánh giá cao vì hiệu ứng phổ biến. Vì vậy nhóm cần nâng cấp công thức similarity và công thức dự đoán bằng cách trừ trung bình hoặc thêm bias để giảm sai lệch.">
+        <h2 class="slide-title">Vấn đề Bias: <span>Người chấm dễ, khó, phim hot</span></h2>
+        <div class="content grid-2">
+            <div class="card card-full-height">
+                <h3 class="text-red mb-20">Vấn đề của Cosine thuần túy</h3>
+                <ul class="custom-list">
+                    <li><strong>Chấm dễ:</strong> Thường cho 4–5 sao.</li>
+                    <li><strong>Chấm khó:</strong> Thường cho 1–2 sao.</li>
+                    <li><strong>Phim Hot:</strong> Được nhiều điểm cao do hiệu ứng đám đông.</li>
+                </ul>
+                <pre class="code-block mt-20">
+Ví dụ trực quan:
+User A: (5, 5, 5)  -> Dễ tính
+User B: (1, 1, 1)  -> Khó tính</pre>
+                <p class="mt-10 text-sub"><em>Cosine xem 2 vector này cùng hướng, nhưng thực tế mức độ yêu thích khác hẳn.</em></p>
+            </div>
+            <div class="card card-full-height" style="border-color: var(--accent-cyan);">
+                <h3 class="text-cyan mb-20">Cách nâng cấp giải quyết</h3>
+                <ul class="custom-list">
+                    <li>Với User-User: Dùng <strong>Pearson Similarity</strong>.</li>
+                    <li>Với Item-Item: Dùng <strong>Adjusted Cosine Similarity</strong>.</li>
+                    <li>Khi dự đoán Rating: Thêm <strong>Mean / Biased Baseline</strong>.</li>
+                </ul>
+                <div class="flow-box mt-20" style="background: rgba(0, 209, 255, 0.1);">
+                    => Trừ đi điểm trung bình hoặc cộng bias để đưa về cùng một hệ quy chiếu xu hướng.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 11 -->
+    <div class="slide" data-notes="User-Based CF xem mỗi người dùng là một vector rating. Khi cần dự đoán user u có thích phim i hay không, hệ thống tìm những người dùng đã xem phim i và có sở thích giống user u nhất. Sau đó hệ thống lấy rating của các láng giềng này, kết hợp với trọng số là độ tương đồng để dự đoán điểm cho user u.">
+        <h2 class="slide-title">User-Based CF: <span>Cách hoạt động</span></h2>
+        <div class="content grid-2">
+            <div>
+                <h3 class="text-cyan mb-20"><i class="fa-solid fa-lightbulb"></i> Ý tưởng</h3>
+                <p>Tìm những user có sở thích giống user mục tiêu, rồi dùng rating của họ để dự đoán phim user chưa xem.</p>
+                
+                <h3 class="text-yellow mt-20 mb-20"><i class="fa-solid fa-list-ol"></i> Quy trình</h3>
+                <ol class="custom-list" style="list-style-type: decimal; padding-left: 20px;">
+                    <li>Chọn user mục tiêu <code>u</code>.</li>
+                    <li>Tính similarity giữa <code>u</code> và các user khác.</li>
+                    <li>Lọc các user đã đánh giá phim <code>i</code>.</li>
+                    <li>Chọn <strong>K = 40</strong> user gần nhất.</li>
+                    <li>Dự đoán rating <code>r_hat(u,i)</code>.</li>
+                </ol>
+            </div>
+            <div class="card card-full-height">
+                <h3 class="mb-20 text-center">Trong Code Dự Án</h3>
+                <ul class="custom-list">
+                    <li>Class: <code class="text-cyan">UserBasedCollaborativeFiltering</code></li>
+                    <li>Đo lường: <strong class="text-yellow">Pearson Similarity</strong></li>
+                    <li>K láng giềng: <strong class="text-cyan">40</strong></li>
+                    <li>Mode dự đoán: <strong>KNN with Means</strong> hoặc KNN with Biased Baseline.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 12 -->
+    <div class="slide" data-notes="Công thức dự đoán của User-Based CF dùng trung bình có trọng số. Đầu tiên lấy điểm trung bình của user mục tiêu làm nền. Sau đó cộng thêm độ lệch rating của các láng giềng, nhân với độ tương đồng. Việc dùng độ lệch so với trung bình giúp giảm ảnh hưởng của người dùng dễ tính hoặc khó tính.">
+        <h2 class="slide-title">Công thức dự đoán <span>User-Based CF</span></h2>
+        <div class="content">
+            <h3 class="text-cyan mb-15">Công thức KNN with Means</h3>
+            <div class="math-box text-center">
+                r&#x0302;(u,i) = mean(u) + &Sigma; [ sim(u,v) &times; (r(v,i) - mean(v)) ] / &Sigma; |sim(u,v)|
+            </div>
+            <div class="grid-2 mt-20">
+                <div class="card" style="padding: 15px;">
+                    <p class="text-yellow mb-10"><strong>Trong đó:</strong></p>
+                    <ul class="custom-list">
+                        <li><code>u</code>: User mục tiêu.</li>
+                        <li><code>i</code>: Phim cần dự đoán.</li>
+                        <li><code>v</code>: User láng giềng đã đánh giá.</li>
+                        <li><code>mean(u)</code>: Điểm TB của user u.</li>
+                        <li><code>sim(u,v)</code>: Độ tương đồng.</li>
+                    </ul>
+                </div>
+                <div class="card" style="padding: 15px;">
+                    <p class="text-yellow mb-10"><strong>Ý nghĩa cốt lõi:</strong></p>
+                    <ul class="custom-list">
+                        <li><code>r(v,i) - mean(v)</code>: Loại bỏ thói quen chấm lệch của láng giềng.</li>
+                        <li><code>sim(u,v)</code> làm trọng số: Càng giống ảnh hưởng càng lớn.</li>
+                        <li>Kết quả giới hạn 1-5 sao.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 13 -->
+    <div class="slide" data-notes="Pearson khắc phục nhược điểm của Cosine bằng cách trừ đi điểm trung bình của từng user trước khi tính độ tương đồng. Nhờ vậy hệ thống không chỉ nhìn vào giá trị điểm tuyệt đối mà nhìn vào xu hướng đánh giá. Trong dự án, nhóm chọn Pearson cho User-Based CF vì nó phù hợp với bài toán so sánh sở thích giữa người dùng.">
+        <h2 class="slide-title">Pearson Similarity <span>cho User-Based CF</span></h2>
+        <div class="content grid-2">
+            <div>
+                <p class="mb-20 text-yellow">Bản chất: Cosine Similarity sau khi đã trừ đi trung bình rating của từng user.</p>
+                <div class="math-box text-center" style="font-size: 16px;">
+                    sim(u,v) = &Sigma; (r(u,i) - mean(u)) &times; (r(v,i) - mean(v))<br>
+                    -------------------------------------------------<br>
+                    &radic;&Sigma;(r(u,i) - mean(u))<sup>2</sup> &times; &radic;&Sigma;(r(v,i) - mean(v))<sup>2</sup>
+                </div>
+            </div>
+            <div class="card card-full-height">
+                <h3 class="text-cyan mb-20">Vì sao dùng Pearson?</h3>
+                <ul class="custom-list">
+                    <li>Loại bỏ ảnh hưởng người chấm dễ / chấm khó.</li>
+                    <li>Tập trung vào <strong>xu hướng thích/không thích</strong>.</li>
+                    <li>Phù hợp nhất với User-Based CF.</li>
+                    <li>Trong dự án: Tính bằng NumPy vectorization (nhanh).</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 14 -->
+    <div class="slide" data-notes="Item-Based CF chuyển góc nhìn từ người dùng sang phim. Thay vì hỏi user nào giống user mục tiêu, thuật toán hỏi phim nào giống với các phim mà user đã xem và đánh giá cao. Hướng này thường ổn định hơn User-Based vì danh sách phim thường ít biến động hơn hành vi người dùng.">
+        <h2 class="slide-title">Item-Based CF: <span>Cách hoạt động</span></h2>
+        <div class="content grid-2">
+            <div>
+                <h3 class="text-cyan mb-20"><i class="fa-solid fa-lightbulb"></i> Ý tưởng</h3>
+                <p>Không tìm user giống user, mà tìm <strong>Phim giống Phim</strong>. Nếu user đã thích phim A, B thì hệ thống dự đoán user sẽ thích phim C (có tính chất giống A, B).</p>
+                
+                <h3 class="text-yellow mt-20 mb-20"><i class="fa-solid fa-list-ol"></i> Quy trình</h3>
+                <ol class="custom-list" style="list-style-type: decimal; padding-left: 20px;">
+                    <li>Chọn user <code>u</code> và phim cần đoán <code>i</code>.</li>
+                    <li>Tìm các phim <code>j</code> user <code>u</code> đã đánh giá.</li>
+                    <li>Tính similarity giữa phim <code>i</code> và <code>j</code>.</li>
+                    <li>Chọn <strong>K = 40</strong> phim tương tự nhất.</li>
+                    <li>Dự đoán từ các rating user đã cho.</li>
+                </ol>
+            </div>
+            <div class="card card-full-height">
+                <h3 class="mb-20 text-center">Trong Code Dự Án</h3>
+                <ul class="custom-list">
+                    <li>Class: <code class="text-cyan">ItemBasedCollaborativeFiltering</code></li>
+                    <li>Đo lường: <strong class="text-yellow">Adjusted Cosine Similarity</strong></li>
+                    <li>Mode dự đoán: <strong class="text-cyan">Biased Baseline</strong>.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 15 -->
+    <div class="slide" data-notes="Với Item-Based CF, điểm dự đoán được tính từ các phim mà user đã đánh giá. Phim nào càng giống phim cần dự đoán thì rating của phim đó càng có trọng số cao. Dự án còn dùng Biased Baseline để tách phần điểm nền gồm trung bình toàn hệ thống, bias của user và bias của phim. Nhờ đó mô hình xử lý tốt hơn trường hợp phim hot hoặc người dùng có thói quen chấm điểm lệch.">
+        <h2 class="slide-title">Công thức dự đoán <span>Item-Based CF</span></h2>
+        <div class="content">
+            <div class="grid-2">
+                <div>
+                    <h3 class="text-cyan mb-10">Item-Based KNN Cơ bản</h3>
+                    <div class="math-box text-center" style="font-size: 16px;">
+                        r&#x0302;(u,i) = &Sigma; sim(i,j) &times; r(u,j) / &Sigma; |sim(i,j)|
+                    </div>
+                    <ul class="custom-list" style="font-size: 14px;">
+                        <li><code>i</code>: Phim cần dự đoán, <code>j</code>: Phim đã đánh giá.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-yellow mb-10">Có Biased Baseline</h3>
+                    <div class="math-box text-center" style="font-size: 16px;">
+                        b(u,i) = &mu; + b<sub>u</sub> + b<sub>i</sub><br><br>
+                        r&#x0302;(u,i) = b(u,i) + &Sigma; sim(i,j)(r(u,j) - b(u,j)) / &Sigma;|sim(i,j)|
+                    </div>
+                </div>
+            </div>
+            <div class="card mt-20">
+                <p class="text-yellow mb-10"><strong>Ý nghĩa Biased Baseline:</strong></p>
+                <ul class="custom-list">
+                    <li><code>&mu;</code>: Rating trung bình toàn hệ thống.</li>
+                    <li><code>b_u</code>: Độ lệch user, <code>b_i</code>: Độ lệch phim.</li>
+                    <li><strong>Mục đích:</strong> Giảm hoàn toàn ảnh hưởng nhiễu của phim quá hot hoặc user chấm điểm quá lệch.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 16 -->
+    <div class="slide" data-notes="Adjusted Cosine được dùng khi so sánh giữa các phim. Nếu chỉ dùng Cosine thường, điểm của các user dễ tính sẽ làm sai lệch độ giống nhau giữa phim. Vì vậy Adjusted Cosine trừ đi điểm trung bình của từng user trước khi so sánh, giúp độ tương đồng item-item phản ánh chính xác hơn.">
+        <h2 class="slide-title">Adjusted Cosine <span>cho Item-Based CF</span></h2>
+        <div class="content grid-2">
+            <div>
+                <p class="mb-20 text-yellow">Dùng cho Item-Item Similarity.</p>
+                <div class="math-box text-center" style="font-size: 16px;">
+                    sim(i,j) = &Sigma; (r(u,i) - mean(u)) &times; (r(u,j) - mean(u))<br>
+                    -------------------------------------------------<br>
+                    &radic;&Sigma;(r(u,i) - mean(u))<sup>2</sup> &times; &radic;&Sigma;(r(u,j) - mean(u))<sup>2</sup>
+                </div>
+                <ul class="custom-list mt-20">
+                    <li>Hàm: <code>compute_adjusted_cosine...</code></li>
+                    <li>Đầu vào: Matrix (Users &times; Items)</li>
+                    <li>Đầu ra: Matrix (Items &times; Items)</li>
+                </ul>
+            </div>
+            <div class="card card-full-height">
+                <h3 class="text-cyan mb-20">Vì sao cần Adjusted?</h3>
+                <ul class="custom-list">
+                    <li>Khi so sánh 2 phim, rating đến từ nhiều user khác nhau.</li>
+                    <li>Mỗi user có thói quen chấm điểm riêng.</li>
+                    <li>Trừ <code>mean(u)</code> giúp <strong>loại bỏ bias của user</strong>.</li>
+                    <li>Phù hợp hơn Cosine thuần túy cho item-item.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 17 -->
+    <div class="slide" data-notes="Model-Based CF khác Memory-Based ở chỗ nó không dự đoán trực tiếp từ toàn bộ ma trận rating, mà học ra một mô hình nén. Với Matrix Factorization, mỗi user và mỗi phim được biểu diễn bằng một vector đặc trưng ẩn. Các đặc trưng này có thể đại diện cho những yếu tố như thích phim hành động, phim kinh điển, phim hài, dù hệ thống không đặt tên trực tiếp cho chúng.">
+        <h2 class="slide-title">Model-Based CF: <span>Matrix Factorization SVD</span></h2>
+        <div class="content grid-2">
+            <div class="card card-full-height">
+                <p class="mb-20 text-yellow">Học mô hình từ dữ liệu thay vì dùng trực tiếp toàn bộ ma trận rating.</p>
+                <ul class="custom-list">
+                    <li>Phân rã ma trận rating thưa thành các ma trận đặc trưng ẩn (Latent factors).</li>
+                    <li>Mỗi user và phim được biểu diễn bằng vector <code>k</code> chiều.</li>
+                    <li>Dự đoán rating bằng tích vô hướng giữa vector user và vector phim.</li>
+                    <li>Trong dự án: <strong class="text-cyan">k = 20</strong> latent factors.</li>
+                </ul>
+            </div>
+            <div style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                <h3 class="text-cyan mb-20">Công thức phân rã</h3>
+                <div class="math-box text-center" style="font-size: 36px; padding: 30px;">
+                    R &approx; P &times; Q<sup>T</sup>
+                </div>
+                <p class="mt-20"><strong>R:</strong> Ma trận rating user-item.</p>
+                <p><strong>P:</strong> Đặc trưng ẩn của user.</p>
+                <p><strong>Q:</strong> Đặc trưng ẩn của item/phim.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 18 -->
+    <div class="slide" data-notes="Công thức SVD hiện đại không chỉ dùng tích vô hướng giữa vector user và phim mà còn thêm các thành phần bias. Rating trung bình toàn hệ thống phản ánh mặt bằng chung. Bias user phản ánh người dùng dễ hay khó chấm điểm. Bias item phản ánh phim thường được đánh giá cao hay thấp hơn trung bình. Phần tích vô hướng học sở thích ẩn giữa user và phim.">
+        <h2 class="slide-title">Công thức <span>SVD có Bias</span></h2>
+        <div class="content grid-2">
+            <div>
+                <h3 class="text-cyan mb-20">Công thức dự đoán rating</h3>
+                <div class="math-box text-center">
+                    r&#x0302;(u,i) = &mu; + b<sub>u</sub> + b<sub>i</sub> + P<sub>u</sub> &middot; Q<sub>i</sub>
+                </div>
+                <ul class="custom-list mt-20">
+                    <li><code>&mu;</code>: Rating TB toàn hệ thống.</li>
+                    <li><code>b_u</code>: Bias của user <code>u</code>.</li>
+                    <li><code>b_i</code>: Bias của phim <code>i</code>.</li>
+                    <li><code>P_u &middot; Q_i</code>: Mức độ phù hợp giữa sở thích ẩn của user và đặc trưng ẩn của phim.</li>
+                </ul>
+            </div>
+            <div class="card card-full-height">
+                <h3 class="text-yellow mb-20 text-center">Tham số trong dự án</h3>
+                <table class="table-modern">
+                    <tr><th>Tham số</th><th>Giá trị</th></tr>
+                    <tr><td>Số latent factors (k)</td><td class="text-cyan text-center">20</td></tr>
+                    <tr><td>Learning rate (&gamma;)</td><td class="text-cyan text-center">0.005</td></tr>
+                    <tr><td>Regularization (&lambda;)</td><td class="text-cyan text-center">0.02</td></tr>
+                    <tr><td>Epochs</td><td class="text-cyan text-center">20</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 19 -->
+    <div class="slide" data-notes="Để học được các vector ẩn P và Q, mô hình dùng thuật toán SGD. Với mỗi rating đã biết, hệ thống dự đoán thử, tính sai số, sau đó cập nhật bias và vector đặc trưng theo hướng giảm sai số. Regularization được thêm vào để tránh trọng số quá lớn và giảm overfitting. Dự án dùng learning rate 0.005, regularization 0.02 và huấn luyện 20 epoch.">
+        <h2 class="slide-title">Huấn luyện SVD: <span>Thuật toán SGD</span></h2>
+        <div class="content grid-2">
+            <div>
+                <p class="mb-10 text-cyan"><strong>Stochastic Gradient Descent</strong></p>
+                <div class="math-box" style="font-size: 16px; padding: 15px;">
+                    e(u,i) = r(u,i) - r&#x0302;(u,i)<br><br>
+                    b_u &larr; b_u + &gamma;(e_ui - &lambda;b_u)<br>
+                    b_i &larr; b_i + &gamma;(e_ui - &lambda;b_i)<br>
+                    P_u &larr; P_u + &gamma;(e_ui Q_i - &lambda;P_u)<br>
+                    Q_i &larr; Q_i + &gamma;(e_ui P_u - &lambda;Q_i)
+                </div>
+                <ul class="custom-list mt-10">
+                    <li><strong class="text-yellow">&gamma;</strong>: Learning rate.</li>
+                    <li><strong class="text-yellow">&lambda;</strong>: Regularization chống overfitting.</li>
+                </ul>
+            </div>
+            <div class="img-wrapper" style="border: none; background: transparent;">
+                <img src="streamlit_tab3_svd_training_curve.png" alt="SVD Training Curve">
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 20 -->
+    <div class="slide" data-notes="Để so sánh thuật toán, nhóm dùng MAE và RMSE. MAE cho biết trung bình mô hình dự đoán lệch bao nhiêu sao so với điểm thật. RMSE cũng đo sai số nhưng nhạy hơn với những dự đoán lệch nhiều. Cả hai chỉ số càng thấp càng tốt.">
+        <h2 class="slide-title">Đánh giá thuật toán: <span>MAE và RMSE</span></h2>
+        <div class="content grid-2">
+            <div>
+                <h3 class="text-cyan mb-15">Mean Absolute Error (MAE)</h3>
+                <div class="math-box text-center">
+                    MAE = (1/N) &Sigma; |r(u,i) - r&#x0302;(u,i)|
+                </div>
+                <p class="mb-20">Sai số tuyệt đối trung bình, dễ diễn giải (vd lệch 0.7 sao).</p>
+                
+                <h3 class="text-yellow mb-15 mt-20">Root Mean Square Error (RMSE)</h3>
+                <div class="math-box text-center">
+                    RMSE = &radic;[ (1/N) &Sigma;(r(u,i) - r&#x0302;(u,i))<sup>2</sup> ]
+                </div>
+                <p>Phạt nặng hơn các lỗi dự đoán lớn.</p>
+            </div>
+            <div class="card card-full-height" style="justify-content: center; align-items: center;">
+                <i class="fa-solid fa-chart-line text-red mb-20" style="font-size: 50px;"></i>
+                <h2 class="text-red mb-20 text-center">Tiêu chí</h2>
+                <h3 class="text-center" style="font-size: 28px;">Cả 2 chỉ số <br><strong class="text-yellow">CÀNG THẤP CÀNG TỐT</strong></h3>
+                <hr style="border-color: rgba(255,255,255,0.1); width: 80%; margin: 20px 0;">
+                <p class="text-center">Thang điểm 1-5, sai số dưới ~1 sao là mức tương đối tốt.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 21 -->
+    <div class="slide" data-notes="Về sản phẩm code, nhóm tổ chức dự án theo cấu trúc module hóa. Dữ liệu gốc nằm trong data/raw, dữ liệu đã xử lý lưu trong data/processed, mô hình sau huấn luyện lưu trong models. Toàn bộ thuật toán cốt lõi nằm trong thư mục src, còn app.py là giao diện Web Streamlit và main.py dùng để kiểm thử nhanh bằng terminal.">
+        <h2 class="slide-title">Cấu trúc <span>Dự án (README.md)</span></h2>
+        <div class="content">
+            <div class="card" style="width: 85%; margin: 0 auto; padding: 20px;">
+                <pre class="code-block" style="font-size: 16px; border: none; background: transparent;">
+movie_recommendation_system/
+├── data/
+│   ├── raw/              <span class="text-sub"># MovieLens 100K gốc</span>
+│   └── processed/        <span class="text-sub"># train_matrix.npy, test_matrix.npy</span>
+├── models/               <span class="text-sub"># file trọng số .pkl sau huấn luyện</span>
+├── notebooks/            <span class="text-sub"># EDA và kiểm chứng thư viện</span>
+├── scripts/
+│   └── train_pipeline.py <span class="text-sub"># pipeline huấn luyện toàn bộ mô hình</span>
+├── src/
+│   ├── data_loader.py    <span class="text-sub"># đọc dữ liệu, tạo ma trận</span>
+│   ├── similarity.py     <span class="text-sub"># Cosine, Pearson, Adjusted Cosine</span>
+│   ├── recommender.py    <span class="text-sub"># User-Based, Item-Based, SVD</span>
+│   ├── content_based.py  <span class="text-sub"># TF-IDF Content-Based fallback</span>
+│   └── evaluation.py     <span class="text-sub"># MAE/RMSE</span>
+├── app.py                <span class="text-sub"># giao diện Streamlit</span>
+└── main.py               <span class="text-sub"># kiểm thử terminal</span></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 22 -->
+    <div class="slide" data-notes="Pipeline của nhóm bắt đầu từ dữ liệu MovieLens thô, sau đó tạo ma trận User-Item và chia train/test. Tiếp theo hệ thống tính các ma trận similarity cho User-Based và Item-Based, huấn luyện SVD, đồng thời lưu các mô hình ra thư mục models. Khi chạy app, hệ thống nạp lại các mô hình đã lưu để sinh gợi ý và đánh giá nhanh hơn.">
+        <h2 class="slide-title">Pipeline <span>Sản phẩm Code</span></h2>
+        <div class="content grid-2">
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <div class="flow-box">MovieLens Raw Data</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-box">Data Loader + Preprocessing (.npy)</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-box">Similarity (Pearson / Adj Cosine)</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-box" style="border-color: var(--accent-yellow);">Train Models (Lưu ra .pkl)</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-box" style="border-color: var(--accent-cyan); background: rgba(0, 209, 255, 0.1);">Streamlit Web App (Evaluate & Rec)</div>
+            </div>
+            <div class="card card-full-height">
+                <h3 class="text-cyan mb-20 text-center">Điểm kỹ thuật nổi bật</h3>
+                <ul class="custom-list">
+                    <li><strong class="text-yellow">Cache ma trận:</strong> Lưu bằng <code>.npy</code> giúp load cực nhanh.</li>
+                    <li><strong class="text-yellow">Offline Training:</strong> Train mô hình trước, lưu trọng số bằng <code>pickle</code> (chỉ cần chạy predict trên web).</li>
+                    <li><strong class="text-yellow">Batch Prediction:</strong> Dùng vector hóa NumPy tăng tốc hàm MAE/RMSE.</li>
+                    <li><strong class="text-yellow">Streamlit 3 Tabs:</strong> Trực quan hóa, Gợi ý, Đánh giá.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 23 -->
+    <div class="slide" data-notes="Trong sản phẩm, nhóm triển khai ba thuật toán chính thuộc Collaborative Filtering là User-Based CF, Item-Based CF và Matrix Factorization SVD. Ngoài ra còn có Content-Based dựa trên TF-IDF để tìm phim tương tự theo nội dung, nhưng phần trọng tâm báo cáo vẫn là các thuật toán Collaborative Filtering và so sánh hiệu năng giữa chúng.">
+        <h2 class="slide-title">Các thuật toán <span>Đã triển khai trong sản phẩm</span></h2>
+        <div class="content">
+            <table class="table-modern" style="font-size: 16px;">
+                <tr>
+                    <th style="width: 25%;">Thuật toán</th>
+                    <th style="width: 20%;">Nhóm</th>
+                    <th>Vai trò trong sản phẩm</th>
+                </tr>
+                <tr>
+                    <td><strong>User-Based CF</strong></td>
+                    <td class="text-cyan">Memory-Based</td>
+                    <td>Tìm user tương tự, dự đoán bằng KNN.</td>
+                </tr>
+                <tr>
+                    <td><strong>Item-Based CF</strong></td>
+                    <td class="text-cyan">Memory-Based</td>
+                    <td>Tìm phim tương tự, dự đoán bằng KNN.</td>
+                </tr>
+                <tr>
+                    <td class="text-yellow"><strong>Matrix Factorization SVD</strong></td>
+                    <td class="text-yellow">Model-Based</td>
+                    <td>Học latent factors, dự đoán nhanh.</td>
+                </tr>
+                <tr>
+                    <td class="text-sub"><strong>Content-Based TF-IDF</strong></td>
+                    <td class="text-sub">Content-Based</td>
+                    <td>Gợi ý phim tương tự, hỗ trợ cold-start item.</td>
+                </tr>
+            </table>
+            <div class="card mt-20 text-center" style="background: rgba(0,209,255,0.05); padding: 15px;">
+                <p><strong class="text-cyan">Trọng tâm báo cáo:</strong> So sánh hiệu năng giữa User-Based, Item-Based và SVD.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 24 -->
+    <div class="slide" data-notes="Trong phần demo, nhóm ưu tiên SVD vì đây là hướng Model-Based, phù hợp với dữ liệu thưa và có tốc độ dự đoán nhanh sau khi huấn luyện. Tuy nhiên kết quả thực nghiệm cho thấy trên MovieLens 100K, các thuật toán Memory-Based, đặc biệt Item-Based, có thể đạt sai số thấp hơn nhẹ. Vì vậy sản phẩm không chỉ dùng một thuật toán mà cho phép chọn và so sánh nhiều thuật toán.">
+        <h2 class="slide-title">Thuật toán ưu tiên <span>Trong sản phẩm</span></h2>
+        <div class="content grid-2">
+            <div class="card card-full-height">
+                <h3 class="text-yellow mb-20 text-center">Ưu tiên Demo: SVD</h3>
+                <ul class="custom-list">
+                    <li>Phù hợp nhất với ma trận rating rất thưa.</li>
+                    <li>Sau khi train, <strong>dự đoán cực nhanh</strong> bằng tích vô hướng vector.</li>
+                    <li>Mô hình lưu siêu nhẹ trong <code>svd_weights.pkl</code>.</li>
+                    <li>Phù hợp hơn nếu mở rộng hệ thống thực tế.</li>
+                </ul>
+            </div>
+            <div class="card card-full-height">
+                <h3 class="text-cyan mb-20 text-center">Thực tế kết quả</h3>
+                <ul class="custom-list">
+                    <li><strong>Item-Based / User-Based</strong> có thể đạt MAE/RMSE thấp hơn nhẹ trên tập 100K.</li>
+                    <li>Lý do: Bộ dữ liệu 100K ở mức vừa/nhỏ, Memory-Based vẫn hoạt động rất hiệu quả.</li>
+                    <li><strong>Giải pháp Web:</strong> Cho phép chọn cả 3 thuật toán để tự do so sánh kết quả.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 25 -->
+    <div class="slide" data-notes="Kết quả so sánh cho thấy Item-Based CF đạt RMSE và MAE thấp nhất trong bảng hiện tại, tiếp theo là User-Based CF và SVD. Điều này phù hợp với dữ liệu MovieLens 100K vì số lượng user và item ở mức vừa phải, Memory-Based vẫn khai thác tốt quan hệ lân cận. Tuy nhiên SVD có lợi thế khi hệ thống cần mở rộng vì phần tính toán nặng được đưa về giai đoạn huấn luyện offline.">
+        <h2 class="slide-title">Kết quả <span>So Sánh Thuật Toán</span></h2>
+        <div class="content">
+            <div class="img-wrapper mb-20" style="height: 60%; background:#fff; border-color:var(--accent-cyan);">
+                <img src="streamlit_tab3_mae_rmse_comparison.png" alt="MAE RMSE Comparison">
+            </div>
+            <div class="grid-2" style="height: 35%;">
+                <div>
+                    <table class="table-modern" style="font-size: 14px; margin: 0;">
+                        <tr><th>Thuật toán</th><th>RMSE</th><th>MAE</th><th>Nhận xét</th></tr>
+                        <tr><td>User-Based CF</td><td>0.9261</td><td>0.7262</td><td>Dễ giải thích, kết quả tốt</td></tr>
+                        <tr><td class="text-yellow"><strong>Item-Based CF</strong></td><td class="text-yellow"><strong>0.9146</strong></td><td class="text-yellow"><strong>0.7189</strong></td><td class="text-yellow">Tốt nhất hiện tại</td></tr>
+                        <tr><td>SVD</td><td>0.9362</td><td>0.7407</td><td>Dự đoán nhanh, dễ mở rộng</td></tr>
+                    </table>
+                </div>
+                <div class="card" style="padding: 15px; display:flex; align-items:center;">
+                    <p><strong>Kết luận:</strong> Item-Based CF đạt sai số thấp nhất, thể hiện độ ổn định trên tập MovieLens. SVD nhỉnh hơn về tốc độ triển khai online thực tế.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 26 -->
+    <div class="slide" data-notes="Ngoài việc tự cài đặt, nhóm còn đối chiếu với thư viện scikit-surprise. Kết quả từ thư viện cho thấy RMSE/MAE khá gần với kết quả của nhóm, đặc biệt với Item-Based CF. Điều này giúp xác nhận rằng cách triển khai của nhóm là hợp lý và không lệch quá xa so với baseline chuẩn.">
+        <h2 class="slide-title">Đối chiếu với <span>Thư viện (scikit-surprise)</span></h2>
+        <div class="content grid-2">
+            <div class="card card-full-height">
+                <h3 class="text-cyan mb-20">Kết quả từ thư viện tham khảo</h3>
+                <table class="table-modern">
+                    <tr><th>Mô hình thư viện</th><th>RMSE</th><th>MAE</th></tr>
+                    <tr><td>KNNBaseline User-Based</td><td>0.9197</td><td>0.7190</td></tr>
+                    <tr><td class="text-yellow">KNNBaseline Item-Based</td><td class="text-yellow">0.9169</td><td class="text-yellow">0.7188</td></tr>
+                </table>
+                <p class="mt-20 text-sub"><em>Trích xuất từ notebook: 02_library_verification.ipynb</em></p>
+            </div>
+            <div class="card card-full-height" style="justify-content: center;">
+                <h3 class="text-yellow mb-20 text-center">Ý nghĩa việc kiểm chứng</h3>
+                <ul class="custom-list">
+                    <li>Kết quả tự cài đặt có xu hướng <strong>gần sát</strong> với thư viện chuẩn.</li>
+                    <li>Xác nhận công thức toán học và logic thuật toán tự cài là hợp lý.</li>
+                    <li>Sai số không lệch quá xa so với baseline phổ biến của thế giới.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 27 -->
+    <div class="slide" data-notes="Khi dựng slide, phần biểu đồ rất quan trọng vì giúp chứng minh dự án không chỉ có lý thuyết mà có phân tích dữ liệu và thực nghiệm. Nhóm nên chèn các biểu đồ EDA từ notebook, sau đó chụp thêm biểu đồ từ Streamlit như độ thưa, long-tail, so sánh MAE/RMSE và đường cong huấn luyện SVD.">
+        <h2 class="slide-title">Tổng hợp <span>Biểu đồ Phân tích</span></h2>
+        <div class="content grid-2">
+            <div class="card card-full-height">
+                <h3 class="text-cyan mb-20">Biểu đồ EDA (Notebooks)</h3>
+                <ul class="custom-list">
+                    <li><strong>Rating Distribution:</strong> Phân phối điểm 1–5.</li>
+                    <li><strong>Top 10 Popular Movies:</strong> Hiện tượng phim phổ biến.</li>
+                    <li><strong>User Engagement:</strong> Số lượt rating mỗi user.</li>
+                </ul>
+            </div>
+            <div class="card card-full-height">
+                <h3 class="text-yellow mb-20">Biểu đồ App (Streamlit)</h3>
+                <ul class="custom-list">
+                    <li><strong>Sparsity Pie & Long-Tail:</strong> Độ thưa dữ liệu.</li>
+                    <li><strong>MAE/RMSE Comparison:</strong> So sánh độ lệch.</li>
+                    <li><strong>SVD Training Curve:</strong> Train/Test RMSE theo Epochs.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 28 -->
+    <div class="slide" data-notes="Sản phẩm cuối cùng là giao diện Streamlit. Tab đầu tiên giúp trực quan hóa dữ liệu và vấn đề cốt lõi của recommender system. Tab thứ hai là chức năng chính, cho phép chọn thuật toán và sinh danh sách phim gợi ý. Tab thứ ba dùng để đánh giá và so sánh các thuật toán bằng MAE/RMSE, đồng thời theo dõi quá trình huấn luyện SVD.">
+        <h2 class="slide-title">Giao diện Sản phẩm <span>(Streamlit Web App)</span></h2>
+        <div class="content grid-2">
+            <div>
+                <h3 class="text-cyan mb-15">Ứng dụng Web gồm 3 Tabs:</h3>
+                <ul class="custom-list" style="font-size: 16px;">
+                    <li><strong class="text-yellow">Tab 1 - Trực quan:</strong> Độ thưa, Long-Tail, Không gian PCA 2D SVD.</li>
+                    <li><strong class="text-yellow">Tab 2 - Gợi ý:</strong> Chọn model (SVD, User/Item CF), nhập User ID, xem Top-N.</li>
+                    <li><strong class="text-yellow">Tab 3 - Đánh giá:</strong> Train curve SVD, So sánh thuật toán.</li>
+                </ul>
+                <pre class="code-block mt-20 text-center">Lệnh chạy: streamlit run app.py</pre>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="img-wrapper"><img src="streamlit_tab1_sparsity_longtail.png" style="background:#fff"></div>
+                <div class="img-wrapper"><img src="streamlit_tab1_svd_pca.jpg" style="background:#fff"></div>
+                <div class="img-wrapper"><img src="streamlit_tab2_goi_y_memory_based.png" style="background:#fff"></div>
+                <div class="img-wrapper"><img src="streamlit_tab3_svd_training_curve.png" style="background:#fff"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 29 -->
+    <div class="slide" data-notes="Đây là ví dụ danh sách Top-5 phim cho User ID 1. Hệ thống chỉ xét các phim user chưa xem, sau đó dùng mô hình để dự đoán rating kỳ vọng. Các phim có điểm dự đoán cao nhất được đưa vào danh sách gợi ý. Điểm dự đoán đều trên 4.5 sao, cho thấy mô hình tin rằng user này có khả năng thích các phim này.">
+        <h2 class="slide-title">Ví dụ gợi ý <span>Top-N Phim (User 1)</span></h2>
+        <div class="content">
+            <div class="img-wrapper mb-20" style="height: 50%; background:#fff; border-color:var(--accent-yellow);">
+                <img src="streamlit_tab2_goi_y_svd_user1.png" alt="Top N Demo">
+            </div>
+            <div class="grid-2" style="height: 45%;">
+                <div>
+                    <h3 class="text-cyan mb-10">Luồng sinh gợi ý:</h3>
+                    <ol class="custom-list" style="list-style-type: decimal; padding-left: 20px; font-size: 16px;">
+                        <li>Lọc các phim user <strong>chưa xem</strong>.</li>
+                        <li>Dự đoán rating cho từng phim bằng SVD.</li>
+                        <li>Sắp xếp giảm dần theo điểm dự đoán.</li>
+                        <li>Trả về Top 5 phim cao điểm nhất hiển thị ra UI.</li>
+                    </ol>
+                </div>
+                <div>
+                    <table class="table-modern" style="font-size: 14px; margin: 0;">
+                        <tr><th>Hạng</th><th>Tên phim</th><th>Dự đoán</th></tr>
+                        <tr><td>1</td><td>Close Shave, A (1995)</td><td class="text-yellow">4.63 ⭐</td></tr>
+                        <tr><td>2</td><td>Blade Runner (1982)</td><td class="text-yellow">4.59 ⭐</td></tr>
+                        <tr><td>3</td><td>Casablanca (1942)</td><td class="text-yellow">4.58 ⭐</td></tr>
+                        <tr><td>4</td><td>One Flew Over the Cuckoo's (1975)</td><td class="text-yellow">4.55 ⭐</td></tr>
+                        <tr><td>5</td><td>Sunset Blvd. (1950)</td><td class="text-yellow">4.54 ⭐</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 30 -->
+    <div class="slide" data-notes="Mỗi thuật toán có thế mạnh riêng. User-Based dễ giải thích vì có thể nói người dùng này giống những người dùng nào. Item-Based ổn định và cho kết quả tốt trong bảng thực nghiệm. SVD phù hợp hơn khi cần triển khai hệ thống lớn vì sau khi train, dự đoán rất nhanh. Content-Based không phải trọng tâm chính nhưng hữu ích khi xử lý phim mới hoặc khi thiếu lịch sử rating.">
+        <h2 class="slide-title">Nhận xét <span>Ưu/Nhược điểm</span></h2>
+        <div class="content">
+            <table class="table-modern" style="margin-bottom: 30px;">
+                <tr><th style="width: 20%;">Thuật toán</th><th>Ưu điểm</th><th>Nhược điểm</th></tr>
+                <tr>
+                    <td><strong>User-Based</strong></td>
+                    <td class="text-cyan">Dễ hiểu, giải thích bằng user tương tự.</td>
+                    <td class="text-red">Chậm khi số user lớn, nhạy với sparsity.</td>
+                </tr>
+                <tr>
+                    <td><strong>Item-Based</strong></td>
+                    <td class="text-cyan">Ổn định, kết quả rất tốt trên 100K.</td>
+                    <td class="text-red">Cần tạo ma trận item-item, khó với item mới.</td>
+                </tr>
+                <tr>
+                    <td><strong>SVD</strong></td>
+                    <td class="text-yellow">Đoán nhanh, học latent factor, cực tốt với data thưa.</td>
+                    <td class="text-red">Khó giải thích trực quan, cần huấn luyện lại.</td>
+                </tr>
+                <tr>
+                    <td><strong>Content-Based</strong></td>
+                    <td class="text-sub">Giải quyết cold-start item, tận dụng metadata.</td>
+                    <td class="text-sub">Gợi ý bị giới hạn, kém đa dạng.</td>
+                </tr>
+            </table>
+            <div class="card text-center" style="padding: 15px; border-color:var(--accent-yellow);">
+                <strong>Chiến lược chọn:</strong> Chính xác cao -> Item-Based | Dễ giải thích -> User-Based | Tốc độ/Mở rộng -> SVD
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 31 -->
+    <div class="slide" data-notes="Hạn chế lớn nhất của hệ thống là dữ liệu thưa và cold-start. Nếu user mới chưa có rating, Collaborative Filtering rất khó gợi ý chính xác. Nếu phim mới chưa ai đánh giá, Memory-Based cũng khó tìm similarity. Hướng phát triển phù hợp là xây dựng mô hình Hybrid, kết hợp Collaborative Filtering với Content-Based, đồng thời tối ưu tham số và cập nhật mô hình theo dữ liệu mới.">
+        <h2 class="slide-title">Hạn chế và <span>Hướng phát triển</span></h2>
+        <div class="content grid-2">
+            <div class="card card-full-height">
+                <h3 class="text-red mb-20"><i class="fa-solid fa-triangle-exclamation"></i> Hạn chế hiện tại</h3>
+                <ul class="custom-list">
+                    <li>Dữ liệu siêu thưa, nhiều cặp chưa có rating.</li>
+                    <li>Vấn đề <strong>Cold-start</strong> nghiêm trọng (User mới / Phim mới).</li>
+                    <li>Chưa khai thác hết metadata (genre, age, occupation).</li>
+                    <li>Kết quả dự đoán còn phụ thuộc nhiều vào Hyperparameters.</li>
+                </ul>
+            </div>
+            <div class="card card-full-height">
+                <h3 class="text-cyan mb-20"><i class="fa-solid fa-rocket"></i> Hướng phát triển</h3>
+                <ul class="custom-list">
+                    <li>Xây dựng <strong>Hybrid Recommender</strong> kết hợp CF + Content-Based.</li>
+                    <li>Tối ưu siêu tham số bằng Grid Search / Random Search.</li>
+                    <li>Dùng 5-fold cross validation đánh giá vững chắc hơn.</li>
+                    <li>Thêm chức năng Online Learning (Nhập rating mới trực tiếp).</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 32 -->
+    <div class="slide" data-notes="Tóm lại, nhóm đã hoàn thành một hệ thống gợi ý phim có đầy đủ các bước từ dữ liệu, tiền xử lý, thuật toán, đánh giá đến giao diện demo. Về lý thuyết, nhóm hiểu và trình bày được Memory-Based CF, User-Based, Item-Based, cũng như Model-Based SVD. Về thực nghiệm, nhóm có bảng so sánh MAE/RMSE và sản phẩm Streamlit để minh họa kết quả trực quan.">
+        <h2 class="slide-title">Kết Luận</h2>
+        <div class="content">
+            <div class="card mb-20">
+                <ul class="custom-list">
+                    <li>Đã xây dựng thành công hệ thống gợi ý trên <strong>MovieLens 100K</strong>.</li>
+                    <li>Đã triển khai hai hướng chính của Collaborative Filtering:
+                        <ul class="custom-list" style="margin-top: 10px;">
+                            <li><strong>Memory-Based CF:</strong> User-Based, Item-Based.</li>
+                            <li><strong>Model-Based CF:</strong> Matrix Factorization SVD.</li>
+                        </ul>
+                    </li>
+                    <li>Đã cài đặt thành công similarity chống nhiễu (<strong>Pearson, Adjusted Cosine</strong>).</li>
+                    <li>Đã so sánh đo lường <strong>MAE / RMSE</strong> độc lập.</li>
+                    <li>Hoàn thiện đóng gói giao diện <strong>Streamlit</strong> demo trực quan.</li>
+                </ul>
+            </div>
+            <div class="card text-center" style="background: rgba(0, 209, 255, 0.1); border-color: var(--accent-cyan); padding: 25px;">
+                <h3 class="text-yellow mb-10">Collaborative Filtering là cốt lõi</h3>
+                <p>Kết hợp đa thuật toán giúp hệ thống cân bằng giữa chính xác, tốc độ và linh hoạt thực tế.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 33 -->
+    <div class="slide" data-notes="Dưới đây là các tài liệu tham khảo chính của nhóm, bao gồm bài báo gốc về dataset MovieLens 100K, sách tham khảo về Recommender Systems và tài liệu của các thư viện mã nguồn mở. Em xin cảm ơn thầy cô và các bạn đã chú ý lắng nghe!">
+        <h2 class="slide-title">Tài liệu <span>Tham khảo</span></h2>
+        <div class="content">
+            <div class="card">
+                <ol style="list-style-type: decimal; padding-left: 30px; font-size: 16px; line-height: 2; color: var(--text-sub);">
+                    <li>F. Maxwell Harper and Joseph A. Konstan. 2015. <em>The MovieLens Datasets: History and Context</em>. ACM Transactions on Interactive Intelligent Systems.</li>
+                    <li>GroupLens. <strong>MovieLens 100K Dataset</strong>. <a href="https://grouplens.org/datasets/movielens/100k/" style="color: var(--accent-cyan);">https://grouplens.org/datasets/movielens/100k/</a></li>
+                    <li>Ricci, F., Rokach, L., Shapira, B. <em>Recommender Systems Handbook</em>. Springer.</li>
+                    <li>NumPy Documentation: <span class="text-cyan">https://numpy.org/doc/</span></li>
+                    <li>Pandas Documentation: <span class="text-cyan">https://pandas.pydata.org/docs/</span></li>
+                    <li>Streamlit Documentation: <span class="text-cyan">https://docs.streamlit.io/</span></li>
+                    <li>Scikit-surprise Documentation: <span class="text-cyan">https://surpriselib.com/</span></li>
+                </ol>
+            </div>
+            <div class="text-center mt-20" style="margin-top: 40px;">
+                <h1 style="font-size: 55px; color: var(--accent-yellow); text-shadow: 0 0 20px rgba(255,200,87,0.4);">XIN CẢM ƠN!</h1>
+                <p style="font-size: 22px; color: var(--text-main); margin-top: 10px;">Q&A - Mời thầy cô và các bạn đặt câu hỏi</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- UI Elements -->
+    <div class="progress-bar" id="progressBar" style="width: 3.03%;"></div>
+    
+    <div class="footer-info" id="footerInfo">
+        [Trang 1 / 33] Hệ thống gợi ý phim MovieLens 100K
+    </div>
+
+    <!-- CONTROLS & SPEAKER NOTES -->
+    <div class="controls">
+        <button class="btn-text" id="btnNotes" title="Bật/Tắt Lời Thuyết Trình"><i class="fa-solid fa-comment-dots"></i> Lời Thuyết Trình</button>
+        <button class="btn-nav" id="btnPrev" title="Quay lại"><i class="fa-solid fa-chevron-left"></i></button>
+        <button class="btn-nav" id="btnNext" title="Tiếp theo"><i class="fa-solid fa-chevron-right"></i></button>
+    </div>
+
+    <div id="speakerNotesPanel">
+        <h4><i class="fa-solid fa-microphone"></i> Lời thuyết trình (Gợi ý):</h4>
+        <p id="speakerNotesContent"></p>
+    </div>
+
+</div>
+
+<script>
+    const slides = document.querySelectorAll('.slide');
+    const progressBar = document.getElementById('progressBar');
+    const footerInfo = document.getElementById('footerInfo');
+    const btnPrev = document.getElementById('btnPrev');
+    const btnNext = document.getElementById('btnNext');
+    const btnNotes = document.getElementById('btnNotes');
+    const speakerNotesPanel = document.getElementById('speakerNotesPanel');
+    const speakerNotesContent = document.getElementById('speakerNotesContent');
+    
+    let currentSlide = 0;
+    const totalSlides = slides.length;
+    let notesVisible = false;
+
+    function updatePresentation() {
+        slides.forEach((slide, index) => {
+            if(index === currentSlide) {
+                slide.classList.add('active');
+            } else {
+                slide.classList.remove('active');
+            }
+        });
+        
+        // Update progress bar
+        const progressPercent = ((currentSlide + 1) / totalSlides) * 100;
+        progressBar.style.width = progressPercent + '%';
+        
+        // Update footer info
+        footerInfo.innerHTML = `[Trang ${currentSlide + 1} / ${totalSlides}] Hệ thống gợi ý phim MovieLens 100K`;
+
+        // Update speaker notes
+        const currentNotes = slides[currentSlide].getAttribute('data-notes');
+        if (currentNotes) {
+            speakerNotesContent.innerHTML = currentNotes;
+        } else {
+            speakerNotesContent.innerHTML = "<em>(Không có gợi ý thuyết trình cho slide này)</em>";
+        }
+    }
+
+    function nextSlide() {
+        if (currentSlide < totalSlides - 1) {
+            currentSlide++;
+            updatePresentation();
+        }
+    }
+
+    function prevSlide() {
+        if (currentSlide > 0) {
+            currentSlide--;
+            updatePresentation();
+        }
+    }
+
+    // Button event listeners
+    btnNext.addEventListener('click', nextSlide);
+    btnPrev.addEventListener('click', prevSlide);
+    
+    // Toggle Speaker Notes
+    btnNotes.addEventListener('click', () => {
+        notesVisible = !notesVisible;
+        if(notesVisible) {
+            speakerNotesPanel.style.display = 'block';
+            btnNotes.style.background = 'var(--accent-yellow)';
+            btnNotes.style.color = '#000';
+        } else {
+            speakerNotesPanel.style.display = 'none';
+            btnNotes.style.background = 'transparent';
+            btnNotes.style.color = 'var(--accent-yellow)';
+        }
+    });
+
+    // Keyboard event listeners
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === ' ') {
+            e.preventDefault();
+            nextSlide();
+        } else if (e.key === 'ArrowLeft') {
+            prevSlide();
+        }
+    });
+
+    // Initialize presentation
+    updatePresentation();
+</script>
+
+</body>
+</html>
