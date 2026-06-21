@@ -8,7 +8,7 @@ import seaborn as sns
 import requests
 from typing import Tuple, Optional, Any, Dict, List
 
-from src.data_loader import load_raw_data, load_movie_titles, load_matrix
+from src.data_loader import load_raw_data, load_movie_titles, load_matrix, add_new_user, add_movie_rating, get_max_user_id
 from src.evaluation import compute_mae, compute_rmse
 from src.recommender import UserBasedCollaborativeFiltering, ItemBasedCollaborativeFiltering, MatrixFactorizationSVD
 from src.content_based import ContentBasedRecommender
@@ -271,12 +271,38 @@ def get_similar_movies(movie_id: int, top_n=5):
     except Exception as e:
         return []
 
+def render_expandable_grid(movies_list: List[Dict], api_key: str, section_key: str, default_count: int = 5):
+    """Hàm hỗ trợ hiển thị lưới phim có tính năng Xem thêm / Thu gọn."""
+    state_key = f"expand_{section_key}"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = default_count
+
+    current_count = st.session_state[state_key]
+    
+    col1, col2 = st.columns([4, 1])
+    with col2:
+        if current_count == default_count and len(movies_list) > default_count:
+            if st.button("Xem thêm", key=f"btn_{section_key}", use_container_width=True):
+                st.session_state[state_key] = current_count + 5
+                st.rerun()
+        elif current_count > default_count:
+            if st.button("Thu gọn", key=f"btn_collapse_{section_key}", use_container_width=True):
+                st.session_state[state_key] = default_count
+                st.rerun()
+                
+    render_movie_grid(movies_list[:current_count], api_key, cols_count=5)
+    
+    if current_count > default_count and current_count < len(movies_list):
+        if st.button("Tải thêm 5 bộ phim", key=f"btn_loadmore_{section_key}"):
+            st.session_state[state_key] += 5
+            st.rerun()
+
 # ==========================================
 # THANH ĐIỀU HƯỚNG BÊN TRÁI (SIDEBAR)
 # ==========================================
 st.sidebar.title("🍿 MovieFlix")
 
-page = st.sidebar.radio("Điều Hướng", ["Trang Chủ (Khám Phá)", "Dành Cho Developer"])
+page = st.sidebar.radio("Điều Hướng", ["Trang Chủ (Khám Phá)", "Đánh giá của người dùng", "Dành Cho Developer"])
 st.sidebar.markdown("---")
 
 st.sidebar.header("Cài Đặt Hệ Thống")
@@ -285,8 +311,32 @@ tmdb_key = st.sidebar.text_input("TMDB API Key (tùy chọn)", value="138b5cfdd8
 # Đăng nhập mô phỏng
 st.sidebar.markdown("---")
 st.sidebar.header("👤 Đăng nhập")
-current_user = st.sidebar.number_input("Nhập User ID (1 - 943)", min_value=1, max_value=train_matrix.shape[0], value=1)
+
+if 'max_user_id' not in st.session_state:
+    st.session_state.max_user_id = max(train_matrix.shape[0], get_max_user_id())
+
+current_user = st.sidebar.number_input(f"Nhập User ID (1 - {st.session_state.max_user_id})", min_value=1, max_value=st.session_state.max_user_id, value=1)
 st.sidebar.success(f"Đã đăng nhập với tư cách **User {current_user}**")
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("Tạo User Mới")
+with st.sidebar.form("new_user_form"):
+    age = st.number_input("Tuổi", min_value=1, max_value=100, value=25)
+    gender = st.selectbox("Giới tính", ["M", "F"])
+    occupation = st.text_input("Nghề nghiệp", value="student")
+    zip_code = st.text_input("Mã bưu điện", value="00000")
+    submit_user = st.form_submit_button("Tạo User")
+    
+    if submit_user:
+        try:
+            new_id = add_new_user(age, gender, occupation, zip_code)
+            st.session_state.max_user_id = new_id
+            st.success(f"Tạo thành công! User ID mới là: {new_id}")
+            # Xóa cache để cập nhật
+            st.cache_data.clear()
+            st.rerun()
+        except Exception as e:
+            st.error(f"Lỗi: {e}")
 
 
 # ==========================================
@@ -295,47 +345,23 @@ st.sidebar.success(f"Đã đăng nhập với tư cách **User {current_user}**"
 if page == "Trang Chủ (Khám Phá)":
     
     # 1. Phim Dành Cho Bạn (For You)
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.header(f"✨ Dành Cho Bạn, User {current_user}")
-        st.markdown("*(Số sao hiển thị bên dưới là điểm số **dự đoán** mà thuật toán SVD nghĩ bạn sẽ chấm cho phim này)*")
-    with col2:
-        st.write("") # Spacer
-        if st.button("👁️ Phim đã đánh giá", use_container_width=True):
-            st.session_state.show_history = not st.session_state.get('show_history', False)
+    st.header(f"✨ Dành Cho Bạn, User {current_user}")
+    st.markdown("*(Số sao hiển thị bên dưới là điểm số **dự đoán** mà thuật toán SVD nghĩ bạn sẽ chấm cho phim này)*")
 
-    if st.session_state.get('show_history', False):
-        st.markdown(f"### 🎬 Lịch sử đánh giá của User {current_user}")
-        user_idx = current_user - 1
-        rated_items = np.where(train_matrix[user_idx] > 0)[0]
-        if len(rated_items) > 0:
-            history_list = []
-            for item_idx in rated_items:
-                rating = train_matrix[user_idx, item_idx]
-                name = movie_titles.get(int(item_idx) + 1, f"Phim {item_idx + 1}")
-                history_list.append({"title": name, "score": f"Đã chấm: {rating} ⭐"})
-            # Sắp xếp theo rating giảm dần
-            history_list.sort(key=lambda x: float(x['score'].split(': ')[1].split(' ')[0]), reverse=True)
-            render_movie_grid(history_list[:10], tmdb_key, cols_count=5)
-            if len(history_list) > 10:
-                st.caption(f"*... và {len(history_list) - 10} phim khác (chỉ hiển thị 10 phim được chấm điểm cao nhất)*")
-        else:
-            st.info("Người dùng này chưa xem/đánh giá bộ phim nào.")
-        st.markdown("---")
-
-    user_recs = get_svd_recommendations(current_user, top_n=5)
+    # Lấy thêm để có thể mở rộng (lấy top 20)
+    user_recs = get_svd_recommendations(current_user, top_n=20)
     
     if not user_recs:
         st.info("Chào người dùng mới! Đây là lần đầu bạn đến với hệ thống, hãy xem các phim thịnh hành bên dưới nhé.")
     else:
-        render_movie_grid(user_recs, tmdb_key, cols_count=5)
+        render_expandable_grid(user_recs, tmdb_key, "foryou")
         
     st.markdown("---")
     
     # 2. Phim Thịnh Hành (Trending)
     st.header("🔥 Phim Đang Thịnh Hành")
-    popular_movies = get_popular_movies(top_n=10)
-    render_movie_grid(popular_movies, tmdb_key, cols_count=5)
+    popular_movies = get_popular_movies(top_n=20)
+    render_expandable_grid(popular_movies, tmdb_key, "trending")
         
     st.markdown("---")
     
@@ -349,11 +375,86 @@ if page == "Trang Chủ (Khám Phá)":
     if selected_movie_str:
         selected_id = int(selected_movie_str.split(" - ")[0])
         st.subheader("Khán giả xem phim này cũng thích:")
-        similar_movies = get_similar_movies(selected_id, top_n=5)
+        similar_movies = get_similar_movies(selected_id, top_n=20)
         if similar_movies:
-            render_movie_grid(similar_movies, tmdb_key, cols_count=5)
+            render_expandable_grid(similar_movies, tmdb_key, "similar")
         else:
             st.warning("Xin lỗi, chưa có đủ dữ liệu để gợi ý phim tương tự cho bộ phim này.")
+
+# ==========================================
+# ĐÁNH GIÁ CỦA NGƯỜI DÙNG
+# ==========================================
+elif page == "Đánh giá của người dùng":
+    st.title("👤 Đánh giá của người dùng")
+    
+    tab_history, tab_rating = st.tabs(["🕒 Lịch sử đánh giá", "⭐ Đánh giá film"])
+    
+    with tab_history:
+        st.subheader(f"Lịch sử đánh giá của User {current_user}")
+        user_idx = current_user - 1
+        
+        # Check if user_idx is valid
+        if user_idx >= train_matrix.shape[0]:
+            st.info("Người dùng này mới tạo, chưa có lịch sử đánh giá.")
+        else:
+            rated_items = np.where(train_matrix[user_idx] > 0)[0]
+            if len(rated_items) > 0:
+                history_list = []
+                for item_idx in rated_items:
+                    rating = train_matrix[user_idx, item_idx]
+                    name = movie_titles.get(int(item_idx) + 1, f"Phim {item_idx + 1}")
+                    history_list.append({"title": name, "score": f"Đã chấm: {rating} ⭐"})
+                history_list.sort(key=lambda x: float(x['score'].split(': ')[1].split(' ')[0]), reverse=True)
+                
+                view_mode = st.radio("Chế độ hiển thị", ["Danh sách mở rộng (Có hình ảnh)", "Danh sách rút gọn"], horizontal=True)
+                
+                if view_mode == "Danh sách mở rộng (Có hình ảnh)":
+                    render_movie_grid(history_list, tmdb_key, cols_count=5)
+                else:
+                    df_history = pd.DataFrame(history_list)
+                    df_history.columns = ['Tên Phim', 'Điểm Đánh Giá']
+                    # Sắp xếp lại chỉ số rank
+                    df_history.index = np.arange(1, len(df_history) + 1)
+                    st.table(df_history)
+            else:
+                st.info("Người dùng này chưa xem/đánh giá bộ phim nào.")
+                
+    with tab_rating:
+        st.subheader("Gửi đánh giá phim")
+        movie_options = [f"{id} - {title}" for id, title in movie_titles.items()]
+        
+        # Thanh tìm kiếm
+        search_query = st.text_input("Tìm kiếm phim theo tên...")
+        
+        if search_query:
+            filtered_options = [opt for opt in movie_options if search_query.lower() in opt.lower()]
+        else:
+            filtered_options = movie_options
+            
+        with st.form("new_rating_form"):
+            selected_movie = st.selectbox("Chọn phim", filtered_options)
+            rating = st.slider("Đánh giá (Sao)", 1, 5, 5)
+            submit_rating = st.form_submit_button("Gửi Đánh Giá")
+            
+            if submit_rating:
+                if selected_movie:
+                    try:
+                        movie_id = int(selected_movie.split(" - ")[0])
+                        add_movie_rating(current_user, movie_id, rating)
+                        st.success("Cảm ơn bạn đã đánh giá! Dữ liệu đã được cập nhật trực tiếp vào SQL Server.")
+                        st.cache_data.clear()
+                    except Exception as e:
+                        st.error(f"Lỗi: {e}")
+                else:
+                    st.warning("Vui lòng chọn một bộ phim.")
+                    
+        # Mặc định hiển thị gợi ý
+        if not search_query:
+            st.markdown("---")
+            st.markdown("**Gợi ý phim bạn có thể thích (SVD):**")
+            user_recs = get_svd_recommendations(current_user, top_n=5)
+            if user_recs:
+                render_movie_grid(user_recs, tmdb_key, cols_count=5)
 
 # ==========================================
 # TRANG DEVELOPER/ADMIN
@@ -476,40 +577,99 @@ elif page == "Dành Cho Developer":
 
         with tab3:
             st.header("So Sánh Gợi Ý Trực Tiếp")
-            st.markdown("So sánh song song xem các thuật toán khác nhau (đều sử dụng phiên bản cải tiến có **Biased Baseline**) sẽ gợi ý những phim gì cho cùng một User.")
+            st.markdown("So sánh song song các thuật toán gợi ý.")
             
-            test_user = st.number_input("Chọn User ID để so sánh:", min_value=1, max_value=train_matrix.shape[0], value=1, key='test_user')
+            c_input1, c_input2 = st.columns(2)
+            with c_input1:
+                test_user = st.number_input("Chọn User ID để so sánh:", min_value=1, max_value=st.session_state.get('max_user_id', train_matrix.shape[0]), value=1, key='test_user')
+            with c_input2:
+                top_k = st.slider("Số lượng bộ phim muốn gợi ý:", min_value=1, max_value=20, value=5, key='top_k_slider')
             
-            if st.button("🔍 Lấy Gợi Ý Top 5"):
-                user_idx = test_user - 1
-                unviewed_items = np.where(train_matrix[user_idx] == 0)[0]
+            if "show_comparison_details" not in st.session_state:
+                st.session_state.show_comparison_details = False
                 
-                if len(unviewed_items) == 0:
-                    st.warning("User này đã xem tất cả các phim!")
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                if st.button("🔍 Gợi ý phim", use_container_width=True):
+                    st.session_state.show_comparison_details = False # Reset chi tiết
+                    st.session_state.run_basic_comparison = True
+            with col_btn2:
+                if st.session_state.get("run_basic_comparison", False):
+                    if st.button("Xem chi tiết so sánh", use_container_width=True):
+                        st.session_state.show_comparison_details = True
+            
+            # Logic chạy dự đoán
+            if st.session_state.get("run_basic_comparison", False):
+                user_idx = test_user - 1
+                if user_idx >= train_matrix.shape[0]:
+                    st.warning("User mới, chưa có trong ma trận huấn luyện, vui lòng thử ID khác.")
                 else:
-                    with st.spinner("Đang chạy dự đoán..."):
-                        preds_user = user_cf.predict_batch(user_idx, unviewed_items)
-                        preds_item = item_cf.predict_batch(user_idx, unviewed_items)
-                        preds_svd = svd_model.predict_batch(user_idx, unviewed_items)
-                        
-                        top_k = 5
-                        top_user_idx = unviewed_items[np.argsort(preds_user)[-top_k:][::-1]]
-                        top_item_idx = unviewed_items[np.argsort(preds_item)[-top_k:][::-1]]
-                        top_svd_idx = unviewed_items[np.argsort(preds_svd)[-top_k:][::-1]]
-                        
-                        c1, c2, c3 = st.columns(3)
-                        with c1:
-                            st.subheader("👤 User-Based CF\n(Biased Baseline)")
-                            for rank, idx in enumerate(top_user_idx, 1):
-                                name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
-                                st.markdown(f"**{rank}.** {name}")
-                        with c2:
-                            st.subheader("📦 Item-Based CF\n(Biased Baseline)")
-                            for rank, idx in enumerate(top_item_idx, 1):
-                                name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
-                                st.markdown(f"**{rank}.** {name}")
-                        with c3:
-                            st.subheader("🧠 SVD\n(Matrix Factorization)")
-                            for rank, idx in enumerate(top_svd_idx, 1):
-                                name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
-                                st.markdown(f"**{rank}.** {name}")
+                    unviewed_items = np.where(train_matrix[user_idx] == 0)[0]
+                    if len(unviewed_items) == 0:
+                        st.warning("User này đã xem tất cả các phim!")
+                    else:
+                        with st.spinner("Đang chạy dự đoán..."):
+                            preds_user = user_cf.predict_batch(user_idx, unviewed_items)
+                            preds_item = item_cf.predict_batch(user_idx, unviewed_items)
+                            preds_svd = svd_model.predict_batch(user_idx, unviewed_items)
+                            
+                            top_user_idx = unviewed_items[np.argsort(preds_user)[-top_k:][::-1]]
+                            top_item_idx = unviewed_items[np.argsort(preds_item)[-top_k:][::-1]]
+                            top_svd_idx = unviewed_items[np.argsort(preds_svd)[-top_k:][::-1]]
+                            
+                            if not st.session_state.get("show_comparison_details", False):
+                                # Hiển thị SVD mặc định
+                                st.subheader(f"Kết quả gợi ý từ SVD ({top_k} phim):")
+                                user_recs = []
+                                top_scores = preds_svd[np.argsort(preds_svd)[-top_k:][::-1]]
+                                for rank, (idx, score) in enumerate(zip(top_svd_idx, top_scores), 1):
+                                    name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
+                                    user_recs.append({"title": name, "score": f"{score:.2f} ⭐", "rank": rank})
+                                render_movie_grid(user_recs, tmdb_key, cols_count=5)
+                            else:
+                                st.markdown("---")
+                                st.subheader("Chi Tiết So Sánh 3 Thuật Toán")
+                                c1, c2, c3 = st.columns(3)
+                                
+                                with c1:
+                                    st.markdown("### 👤 User-Based CF")
+                                    user_cf_mode = st.selectbox("Phương pháp:", ["biased_baseline", "means"], key="user_cf_mode")
+                                    
+                                    # Tạo instance tạm để chạy mode khác
+                                    temp_user_cf = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode=user_cf_mode)
+                                    temp_user_cf.train_matrix = user_cf.train_matrix
+                                    temp_user_cf.similarity_matrix = user_cf.similarity_matrix
+                                    temp_user_cf.user_means = user_cf.user_means
+                                    if user_cf_mode == 'biased_baseline':
+                                        temp_user_cf.baseline_predictor = user_cf.baseline_predictor
+                                        
+                                    t_preds_user = temp_user_cf.predict_batch(user_idx, unviewed_items)
+                                    t_top_user_idx = unviewed_items[np.argsort(t_preds_user)[-top_k:][::-1]]
+                                    
+                                    for rank, idx in enumerate(t_top_user_idx, 1):
+                                        name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
+                                        st.markdown(f"**{rank}.** {name}")
+                                        
+                                with c2:
+                                    st.markdown("### 📦 Item-Based CF")
+                                    item_cf_mode = st.selectbox("Phương pháp:", ["biased_baseline", "pure"], key="item_cf_mode")
+                                    
+                                    temp_item_cf = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors, prediction_mode=item_cf_mode)
+                                    temp_item_cf.train_matrix = item_cf.train_matrix
+                                    temp_item_cf.similarity_matrix = item_cf.similarity_matrix
+                                    if item_cf_mode == 'biased_baseline':
+                                        temp_item_cf.baseline_predictor = item_cf.baseline_predictor
+                                        
+                                    t_preds_item = temp_item_cf.predict_batch(user_idx, unviewed_items)
+                                    t_top_item_idx = unviewed_items[np.argsort(t_preds_item)[-top_k:][::-1]]
+                                    
+                                    for rank, idx in enumerate(t_top_item_idx, 1):
+                                        name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
+                                        st.markdown(f"**{rank}.** {name}")
+                                        
+                                with c3:
+                                    st.markdown("### 🧠 SVD")
+                                    st.markdown("*Matrix Factorization*")
+                                    for rank, idx in enumerate(top_svd_idx, 1):
+                                        name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
+                                        st.markdown(f"**{rank}.** {name}")

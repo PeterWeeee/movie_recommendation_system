@@ -2,8 +2,41 @@ import os
 import numpy as np
 import pandas as pd
 from typing import Tuple, Dict
+from sqlalchemy import create_engine, text
+import urllib
+import pyodbc
+
+USE_SQL_SERVER = True
+DB_NAME = 'MovieRecommendationDB'
+SERVER = 'localhost'
+
+def get_engine():
+    drivers = [d for d in pyodbc.drivers()]
+    driver = 'SQL Server'
+    if 'ODBC Driver 17 for SQL Server' in drivers:
+        driver = 'ODBC Driver 17 for SQL Server'
+    elif 'ODBC Driver 18 for SQL Server' in drivers:
+        driver = 'ODBC Driver 18 for SQL Server'
+        
+    params = urllib.parse.quote_plus(
+        f'DRIVER={{{driver}}};'
+        f'SERVER={SERVER};'
+        f'DATABASE={DB_NAME};'
+        f'Trusted_Connection=yes;'
+        f'TrustServerCertificate=yes;'
+    )
+    return create_engine(f"mssql+pyodbc:///?odbc_connect={params}")
 
 def load_raw_data(file_path: str) -> pd.DataFrame:
+    if USE_SQL_SERVER:
+        try:
+            engine = get_engine()
+            query = "SELECT user_id, movie_id as item_id, rating, timestamp FROM ratings"
+            df = pd.read_sql(query, engine)
+            return df
+        except Exception as e:
+            print(f"Failed to load from SQL Server: {e}. Falling back to CSV.")
+            
     # Đọc tệp dữ liệu u.data với phân tách bằng dấu tab
     columns = ['user_id', 'item_id', 'rating', 'timestamp']
     df = pd.read_csv(file_path, sep='\t', names=columns)
@@ -59,6 +92,15 @@ def load_movie_titles(file_path: str) -> Dict[int, str]:
     """
     Đọc tệp u.item để lấy bản đồ ánh xạ từ item_id sang tên bộ phim.
     """
+    if USE_SQL_SERVER:
+        try:
+            engine = get_engine()
+            query = "SELECT movie_id, title FROM movies"
+            df = pd.read_sql(query, engine)
+            return dict(zip(df['movie_id'], df['title']))
+        except Exception as e:
+            print(f"Failed to load movies from SQL Server: {e}. Falling back to CSV.")
+
     movie_titles = {}
     # Sử dụng mã hóa ISO-8859-1 vì tệp u.item chứa một số ký tự đặc biệt không thuộc UTF-8
     with open(file_path, 'r', encoding='ISO-8859-1') as f:
@@ -69,6 +111,39 @@ def load_movie_titles(file_path: str) -> Dict[int, str]:
                 movie_title = fields[1]
                 movie_titles[item_id] = movie_title
     return movie_titles
+
+def get_max_user_id() -> int:
+    if not USE_SQL_SERVER:
+        return 943
+    try:
+        engine = get_engine()
+        with engine.begin() as conn:
+            res = conn.execute(text("SELECT ISNULL(MAX(user_id), 0) FROM users"))
+            return res.scalar()
+    except Exception as e:
+        print(f"Failed to get max user id from SQL Server: {e}")
+        return 943
+
+def add_new_user(age: int, gender: str, occupation: str, zip_code: str) -> int:
+    if not USE_SQL_SERVER:
+        raise NotImplementedError("SQL Server is not enabled.")
+    engine = get_engine()
+    with engine.begin() as conn:
+        res = conn.execute(text("SELECT ISNULL(MAX(user_id), 0) FROM users"))
+        new_id = res.scalar() + 1
+        query = text("INSERT INTO users (user_id, age, gender, occupation, zip_code) VALUES (:id, :a, :g, :o, :z)")
+        conn.execute(query, {"id": new_id, "a": age, "g": gender, "o": occupation, "z": zip_code})
+        return new_id
+
+def add_movie_rating(user_id: int, item_id: int, rating: int):
+    if not USE_SQL_SERVER:
+        raise NotImplementedError("SQL Server is not enabled.")
+    engine = get_engine()
+    import time
+    timestamp = int(time.time())
+    with engine.begin() as conn:
+        query = text("INSERT INTO ratings (user_id, movie_id, rating, timestamp) VALUES (:u, :m, :r, :t)")
+        conn.execute(query, {"u": user_id, "m": item_id, "r": rating, "t": timestamp})
 
 def get_or_create_processed_matrices(data_path: str, processed_dir: str, test_ratio: float = 0.2) -> Tuple[np.ndarray, np.ndarray]:
     """
