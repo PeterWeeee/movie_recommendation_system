@@ -17,8 +17,6 @@ movie_recommendation_system/
 │                              # Giúp hệ thống nạp dữ liệu tức thì, bỏ qua bước đọc file text thô
 │
 ├── docs/                    # Thư mục chứa tài liệu mô tả hệ thống
-│   ├── algorithm_comparison_plan.md
-│   ├── app_upgrade.md
 │   ├── production_architecture.md
 │   └── system_principles.md
 │
@@ -30,7 +28,8 @@ movie_recommendation_system/
 │   └── 03_inspect_matrix.ipynb        # Công cụ tương tác xem ma trận dữ liệu Train/Test
 │
 ├── scripts/                   # Các script thực thi Pipeline
-│   └── train_pipeline.py      # Tiền xử lý dữ liệu, huấn luyện mô hình (SVD, CF, Content-Based) và lưu file .pkl
+│   ├── train_pipeline.py      # Tiền xử lý dữ liệu, huấn luyện mô hình (SVD, CF, Content-Based) và lưu file .pkl
+│   └── ingest_to_sqlserver.py # Chuyển đổi dữ liệu và đồng bộ vào SQL Server
 │
 ├── src/                       # Thư mục mã nguồn giải thuật cốt lõi
 │   ├── __init__.py
@@ -126,8 +125,9 @@ python -m pytest tests/ -v
 
 | Thuật toán | Mô tả |
 |---|---|
-| **User-Based Collaborative Filtering** | Tìm K người dùng có sở thích tương đồng nhất (Pearson Similarity) và dự đoán điểm số theo công thức KNN with Biased Baseline |
-| **Item-Based Collaborative Filtering** | Đánh giá độ tương đồng giữa các phim (Adjusted Cosine Similarity), dự đoán theo KNN with Biased Baseline |
+| **Global Baseline (Biased Predictor)** | Dự đoán điểm số dựa trên xu hướng toàn cục: $r = \mu + b_u + b_i$, cung cấp mốc tham chiếu cho các mô hình phức tạp. |
+| **User-Based Collaborative Filtering** | Hỗ trợ 3 chế độ: Basic, Means (KNN with Means) và Biased Baseline. Dùng Pearson Similarity tìm người dùng tương đồng. |
+| **Item-Based Collaborative Filtering** | Hỗ trợ chế độ Basic và Biased Baseline. Đánh giá độ tương đồng giữa các phim bằng Cosine / Adjusted Cosine Similarity. |
 | **Matrix Factorization (SVD + SGD)** | Phân rã ma trận User-Item thành các nhân tử ẩn (latent factors), huấn luyện bằng Stochastic Gradient Descent với L2 Regularization |
 | **Content-Based Filtering** | Phân tích thể loại phim bằng TF-IDF và tính khoảng cách Cosine để tìm phim tương đồng về nội dung |
 
@@ -135,8 +135,11 @@ python -m pytest tests/ -v
 
 | Thuật toán | RMSE | MAE |
 |---|---|---|
+| User-Based CF (KNN Basic) | 1.0934 | 0.8496 |
+| User-Based CF (KNN Means) | 0.9368 | 0.7323 |
 | User-Based CF (KNN Biased Baseline) | 0.9261 | 0.7262 |
-| Item-Based CF (KNN Biased Baseline) | 0.9146 | 0.7189 |
+| Item-Based CF (KNN Basic) | 1.2336 | 0.9230 |
+| Item-Based CF (KNN Biased Baseline) | 0.9145 | 0.7188 |
 | Matrix Factorization SVD | 0.9362 | 0.7407 |
 
 > Đối chiếu tham khảo từ thư viện `scikit-surprise` (notebook `02_library_verification.ipynb`):
