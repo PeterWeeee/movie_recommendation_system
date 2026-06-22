@@ -196,8 +196,9 @@ def get_popular_movies(user_id: int, top_n=10):
     
     res = []
     for rank, (m_id, count) in enumerate(popular_ids.items(), 1):
-        item_idx = int(m_id) - 1
-        name = movie_titles.get(int(m_id), f"Phim {int(m_id)}")
+        m_id_int = int(m_id) # type: ignore
+        item_idx = m_id_int - 1
+        name = movie_titles.get(m_id_int, f"Phim {m_id_int}")
         
         score_text = "Chưa đánh giá"
         if user_idx < train_matrix.shape[0] and item_idx < train_matrix.shape[1]:
@@ -205,7 +206,7 @@ def get_popular_movies(user_id: int, top_n=10):
             if rating > 0:
                 score_text = f"Đã chấm: {rating} ⭐"
                 
-        res.append({"title": name, "score": score_text, "rank": rank, "movie_id": int(m_id)})
+        res.append({"title": name, "score": score_text, "rank": rank, "movie_id": m_id_int})
     return res
 
 @st.cache_data
@@ -428,7 +429,7 @@ st.sidebar.header("👤 Đăng nhập")
 if 'max_user_id' not in st.session_state:
     st.session_state.max_user_id = max(train_matrix.shape[0], get_max_user_id())
 
-current_user = st.sidebar.number_input(f"Nhập User ID (1 - {st.session_state.max_user_id})", min_value=1, max_value=st.session_state.max_user_id, value=1)
+current_user = st.sidebar.number_input(f"Nhập User ID (1 - {st.session_state.max_user_id})", min_value=1, max_value=int(st.session_state.max_user_id), value=1, step=1)
 st.sidebar.success(f"Đã đăng nhập với tư cách **User {current_user}**")
 
 st.sidebar.markdown("---")
@@ -617,7 +618,7 @@ elif page == "Dành Cho Developer":
                 indices = [u - 1 for u in sample_users]
                 sim_sub = user_cf.similarity_matrix[np.ix_(indices, indices)]
                 fig_sim, ax_sim = plt.subplots(figsize=(5, 4))
-                sns.heatmap(sim_sub, annot=True, fmt=".2f", cmap="YlGnBu", xticklabels=sample_users, yticklabels=sample_users, ax=ax_sim, annot_kws={"size": 8})
+                sns.heatmap(sim_sub, annot=True, fmt=".2f", cmap="YlGnBu", xticklabels=[str(u) for u in sample_users], yticklabels=[str(u) for u in sample_users], ax=ax_sim, annot_kws={"size": 8})
                 ax_sim.set_title("User Similarity Matrix (Pearson)", fontsize=10)
                 st.pyplot(fig_sim)
 
@@ -714,7 +715,7 @@ elif page == "Dành Cho Developer":
             
             c_input1, c_input2 = st.columns(2)
             with c_input1:
-                test_user = st.number_input("Chọn User ID để so sánh:", min_value=1, max_value=st.session_state.get('max_user_id', train_matrix.shape[0]), value=1, key='test_user')
+                test_user = st.number_input("Chọn User ID để so sánh:", min_value=1, max_value=int(st.session_state.get('max_user_id', train_matrix.shape[0])), value=1, step=1, key='test_user')
             with c_input2:
                 top_k = st.slider("Số lượng bộ phim muốn gợi ý:", min_value=1, max_value=20, value=5, key='top_k_slider')
             

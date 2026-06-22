@@ -144,8 +144,12 @@ python -m pytest tests/ -v
 
 ## 6. Chức Năng Giao Diện
 
+- 🔑 **Thanh Điều Hướng & Đăng Nhập**: Hỗ trợ đăng nhập mô phỏng bằng User ID, tạo User mới với các thông tin nhân khẩu học cơ bản và cấu hình TMDB API Key.
 - 🏠 **Trang Chủ (Khám Phá)**: Trải nghiệm ứng dụng thực tế với danh sách phim "Dành Cho Bạn" (cá nhân hóa bằng SVD), "Đang Thịnh Hành" (dựa trên chất lượng nội tại từ Biased Predictor), và tìm kiếm "Phim Tương Tự" (Item-Based CF). Tích hợp TMDB API để hiển thị ảnh bìa phim trực quan, sinh động.
-- **Dành Cho Developer**: Không gian phân tích kỹ thuật chuyên sâu với 3 tab:
+- 👤 **Đánh giá của người dùng**: Quản lý hồ sơ cá nhân với 2 tab:
+  - **Lịch sử đánh giá**: Xem lại danh sách các phim đã đánh giá dưới dạng thẻ ảnh trực quan hoặc dạng bảng.
+  - **Đánh giá film**: Tìm kiếm, chấm điểm phim mới và cập nhật trực tiếp vào hệ thống (cập nhật qua ma trận/SQL).
+- 👨‍💻 **Dành Cho Developer**: Không gian phân tích kỹ thuật chuyên sâu với 3 tab:
   - **Trực Quan Hóa Dữ Liệu**: Biểu đồ độ thưa thớt (Sparsity), hiện tượng Long-Tail, và không gian đặc trưng ẩn 2D của SVD (PCA).
   - **Phân tích và Đánh giá Mô hình**: Đồ thị Training Loss của SVD và bảng so sánh MAE, RMSE, Precision@K, Recall@K, và Tốc độ dự đoán giữa các thuật toán.
   - **So Sánh Thuật Toán**: So sánh song song top phim gợi ý từ các thuật toán khác nhau (User-Based, Item-Based, SVD) cho cùng một User.

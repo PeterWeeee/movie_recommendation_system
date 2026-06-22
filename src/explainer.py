@@ -30,6 +30,8 @@ class AlgorithmExplainer:
         ratings = train_matrix[top_other_users, item_idx]
         
         table_md = "| Láng Giềng (User ID) | Tương đồng (Sim) | Đánh giá (R) | "
+        pred = 0.0
+        formula = ""
         if mode == 'basic':
             table_md += "|\n|---|---|---|---|\n"
             for u, sim, r in zip(top_other_users, top_similarities, ratings):
@@ -102,6 +104,8 @@ Bảng phân tích chi tiết {len(top_other_users)} láng giềng gần nhất 
         ratings = train_matrix[user_idx, top_rated_items]
         
         table_md = "| Phim láng giềng (Item) | Tương đồng (Sim) | Điểm User đã chấm (R) | "
+        pred = 0.0
+        formula = ""
         if mode == 'basic':
             table_md += "|\n|---|---|---|---|\n"
             for i, sim, r in zip(top_rated_items, top_sims, ratings):
@@ -274,6 +278,7 @@ $$ \\text{{Pred}} = {mu:.2f} + {b_u:.2f} + {b_i:.2f} + {dot_product:.2f} = {fina
         step3_data = {"mode": mode, "details": []}
         formula_data = {}
         
+        pred = 0.0
         if mode == 'basic':
             raw_pred = np.sum(top_similarities * ratings) / sim_sum
             pred = float(np.clip(raw_pred, 1.0, 5.0))
@@ -365,6 +370,7 @@ $$ \\text{{Pred}} = {mu:.2f} + {b_u:.2f} + {b_i:.2f} + {dot_product:.2f} = {fina
         step3_data = {"mode": mode, "details": []}
         formula_data = {}
         
+        pred = 0.0
         if mode == 'basic':
             raw_pred = np.sum(top_sims * ratings) / sim_sum
             pred = float(np.clip(raw_pred, 1.0, 5.0))
