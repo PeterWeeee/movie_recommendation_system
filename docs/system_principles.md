@@ -55,7 +55,14 @@ Khi hệ thống vận hành trên giao diện Web App, luồng xử lý đượ
 
 ## 4. Đo Lường & Đánh Giá
 
-Để chứng minh tính hiệu quả của các công thức tự xây dựng từ đầu (Scratch), hệ thống liên tục tính toán trên tập Test (20% dữ liệu ẩn):
-- **MAE (Mean Absolute Error)**: Độ lệch tuyệt đối trung bình (Ví dụ: Dự đoán 4 sao, thực tế 3.5 sao -> MAE = 0.5).
-- **RMSE (Root Mean Square Error)**: Phạt nặng hơn đối với các dự đoán sai lệch quá lớn.
-Hệ thống cũng được so sánh ngang hàng (Benchmark) với thư viện chuyên dụng `scikit-surprise` để đảm bảo kết quả tính toán có tính thực tiễn và chuẩn xác theo chuẩn khoa học dữ liệu.
+Để chứng minh tính hiệu quả của các công thức tự xây dựng từ đầu (Scratch), hệ thống liên tục tính toán trên tập Test (20% dữ liệu ẩn) thông qua các bộ tiêu chí đa chiều:
+- **Đánh giá sai số dự đoán (Rating Prediction)**:
+  - **MAE (Mean Absolute Error)**: Độ lệch tuyệt đối trung bình (Ví dụ: Dự đoán 4 sao, thực tế 3.5 sao -> MAE = 0.5).
+  - **RMSE (Root Mean Square Error)**: Phạt nặng hơn đối với các dự đoán sai lệch quá lớn.
+- **Đánh giá chất lượng xếp hạng (Ranking Quality)**:
+  - **Precision@K**: Tỷ lệ phim đúng sở thích trong top K gợi ý. Phản ánh trực tiếp trải nghiệm của người dùng với các kết quả xuất hiện trên cùng.
+  - **Recall@K**: Khả năng bao phủ, tức là hệ thống gom được bao nhiêu phần trăm các phim thực sự yêu thích của người dùng vào top K.
+- **Đánh giá hiệu năng hệ thống**:
+  - **Tốc độ (Speed)**: Đo lường thời gian trung bình để đưa ra dự đoán cho một người dùng. Đây là yếu tố then chốt khi triển khai hệ thống thời gian thực.
+
+Hệ thống cũng được lưu trữ một notebook riêng (`02_library_verification.ipynb`) để đối chiếu ngang hàng (Benchmark) với thư viện chuyên dụng `scikit-surprise`, đảm bảo các công thức tự xây dựng bám sát và chính xác theo chuẩn khoa học dữ liệu.

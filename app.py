@@ -9,9 +9,13 @@ import requests
 from typing import Tuple, Optional, Any, Dict, List
 
 from src.data_loader import load_raw_data, load_movie_titles, load_matrix, add_new_user, add_movie_rating, get_max_user_id
-from src.evaluation import compute_mae, compute_rmse
+from src.evaluation import compute_mae, compute_rmse, compute_precision_recall_at_k, compute_prediction_time
 from src.recommender import UserBasedCollaborativeFiltering, ItemBasedCollaborativeFiltering, MatrixFactorizationSVD
 from src.content_based import ContentBasedRecommender
+from src.explainer import AlgorithmExplainer
+
+import surprise
+from surprise import Dataset, Reader, SVD as SurpriseSVD, KNNBasic as SurpriseKNNBasic, KNNWithMeans as SurpriseKNNWithMeans
 
 st.set_page_config(page_title="MovieFlix - Đề Xuất Phim", layout="wide", page_icon="🍿")
 
@@ -64,7 +68,7 @@ st.markdown("""
     margin-top: 10px;
     margin-bottom: 5px;
     line-height: 1.2;
-    flex-grow: 1;
+    height: 36px;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -75,6 +79,7 @@ st.markdown("""
     color: #f5c518;
     font-size: 14px;
     font-weight: bold;
+    min-height: 20px;
 }
 .movie-rank {
     position: absolute;
@@ -183,41 +188,25 @@ df_raw, train_matrix, test_matrix, movie_titles, user_cf, item_cf, svd_model, co
 
 # Tính toán top phổ biến (tính toán sẵn một lần)
 @st.cache_data
-def get_popular_movies(top_n=10):
-    # Sử dụng thuật toán Biased Predictor thay vì đếm số lượng thông thường
-    # Lấy model BiasedPredictor đã được huấn luyện bên trong item_cf
-    baseline = item_cf.baseline_predictor
-    
-    # Lọc ra các phim có ít nhất 50 lượt đánh giá để tránh các phim "ảo" (chỉ 1 người đánh giá 5 sao)
+def get_popular_movies(user_id: int, top_n=10):
+    user_idx = user_id - 1
+    # Sử dụng số lượng đánh giá để xác định độ thịnh hành
     item_counts = df_raw['item_id'].value_counts()
-    valid_items = item_counts[item_counts > 50].index
+    popular_ids = item_counts.head(top_n)
     
-    if baseline is not None and baseline.b_i is not None:
-        item_scores = []
-        for m_id in valid_items:
-            idx = int(m_id) - 1 # Chuyển ID thành index
-            if idx < len(baseline.b_i):
-                # Công thức Biased Predictor: Điểm phim = mu (trung bình hệ thống) + b_i (độ lệch của phim)
-                score = baseline.mu + baseline.b_i[idx]
-                item_scores.append((m_id, score))
-                
-        # Sắp xếp lấy phim có điểm (Bias) cao nhất
-        item_scores.sort(key=lambda x: x[1], reverse=True)
-        top_items = item_scores[:top_n]
+    res = []
+    for rank, (m_id, count) in enumerate(popular_ids.items(), 1):
+        item_idx = int(m_id) - 1
+        name = movie_titles.get(int(m_id), f"Phim {int(m_id)}")
         
-        res = []
-        for rank, (m_id, score) in enumerate(top_items, 1):
-            name = movie_titles.get(int(m_id), f"Phim {int(m_id)}")
-            res.append({"title": name, "score": f"Chất lượng: {score:.2f} ⭐", "rank": rank})
-        return res
-    else:
-        # Fallback về phương pháp cũ nếu không tìm thấy mô hình Biased Predictor
-        popular_ids = item_counts.head(top_n).index
-        res = []
-        for rank, m_id in enumerate(popular_ids, 1):
-            name = movie_titles.get(int(m_id), f"Phim {int(m_id)}")
-            res.append({"title": name, "score": "Đang thịnh hành 🔥", "rank": rank})
-        return res
+        score_text = "Chưa đánh giá"
+        if user_idx < train_matrix.shape[0] and item_idx < train_matrix.shape[1]:
+            rating = train_matrix[user_idx, item_idx]
+            if rating > 0:
+                score_text = f"Đã chấm: {rating} ⭐"
+                
+        res.append({"title": name, "score": score_text, "rank": rank, "movie_id": int(m_id)})
+    return res
 
 @st.cache_data
 def get_svd_recommendations(user_id: int, top_n=10):
@@ -239,12 +228,13 @@ def get_svd_recommendations(user_id: int, top_n=10):
     res = []
     for rank, (item_idx, score) in enumerate(zip(top_item_indices, top_scores), 1):
         name = movie_titles.get(int(item_idx) + 1, f"Phim {int(item_idx) + 1}")
-        res.append({"title": name, "score": f"{score:.2f} ⭐", "rank": rank})
+        res.append({"title": name, "score": "Chưa đánh giá", "rank": rank, "movie_id": int(item_idx) + 1})
     return res
 
 @st.cache_data
-def get_similar_movies(movie_id: int, top_n=5):
+def get_similar_movies(user_id: int, movie_id: int, top_n=5):
     try:
+        user_idx = user_id - 1
         movie_idx = movie_id - 1
         # Chuyển sang dùng Item-Based CF để tìm phim tương tự (Collaborative Filtering thuần)
         similarities = item_cf.similarity_matrix[movie_idx]
@@ -263,7 +253,14 @@ def get_similar_movies(movie_id: int, top_n=5):
                 continue
                 
             name = movie_titles.get(int(idx) + 1, f"Phim {int(idx) + 1}")
-            res.append({"title": name, "score": f"Độ tương đồng: {similarities[idx]:.2f}", "rank": rank})
+            
+            score_text = "Chưa đánh giá"
+            if user_idx < train_matrix.shape[0] and idx < train_matrix.shape[1]:
+                rating = train_matrix[user_idx, idx]
+                if rating > 0:
+                    score_text = f"Đã chấm: {rating} ⭐"
+                    
+            res.append({"title": name, "score": score_text, "rank": rank, "movie_id": int(idx) + 1})
             rank += 1
             if len(res) == top_n:
                 break
@@ -296,6 +293,122 @@ def render_expandable_grid(movies_list: List[Dict], api_key: str, section_key: s
         if st.button("Tải thêm 5 bộ phim", key=f"btn_loadmore_{section_key}"):
             st.session_state[state_key] += 5
             st.rerun()
+
+def render_visualizer(algo_type, data):
+    if "error" in data:
+        st.warning(data["error"])
+        return
+
+    st.markdown(f"**Visualizer: {data.get('algo_type', algo_type)} (Chế độ {data.get('mode', '')})**")
+    
+    if "CF" in data.get("algo_type", algo_type):
+        st.info("💡 **Gợi ý dựa trên Lọc Cộng Tác (Collaborative Filtering)**: Tìm những người dùng (hoặc phim) giống với đối tượng hiện tại nhất, sau đó tổng hợp điểm số từ họ để đưa ra dự đoán.")
+        
+        tab1, tab2, tab3, tab4 = st.tabs(["1️⃣ Dữ liệu nền", "2️⃣ Tìm láng giềng", "3️⃣ Điều chỉnh sai số", "4️⃣ Dự đoán"])
+        
+        with tab1:
+            st.markdown("#### Bước 1: Trích xuất Ma trận đánh giá con (Sub-matrix)")
+            st.markdown("Lọc ra dữ liệu của đối tượng đang xét và các láng giềng liên quan. Màu đỏ là ô cần dự đoán.")
+            step1 = data["step1_data"]
+            df = step1["df_matrix"]
+            target_row = step1["target_row"]
+            target_col = step1["target_col"]
+            
+            def highlight_target(x):
+                c = pd.DataFrame('', index=x.index, columns=x.columns)
+                if target_row in c.index:
+                    c.loc[target_row, :] = 'background-color: rgba(255, 255, 0, 0.4); color: black;'
+                if target_col in c.columns:
+                    c.loc[:, target_col] = 'background-color: rgba(0, 255, 255, 0.4); color: black;'
+                if target_row in c.index and target_col in c.columns:
+                    c.loc[target_row, target_col] = 'background-color: rgba(255, 0, 0, 0.6); color: white;'
+                return c
+                
+            st.dataframe(df.style.apply(highlight_target, axis=None).format("{:.1f}", na_rep="-"))
+            
+        with tab2:
+            st.markdown("#### Bước 2: Độ tương đồng của các Láng giềng")
+            step2 = data["step2_data"]
+            neighbors_df = pd.DataFrame(step2["neighbors_data"])
+            
+            if not neighbors_df.empty:
+                label_col = "User ID" if "User ID" in neighbors_df.columns else "Item"
+                fig, ax = plt.subplots(figsize=(6, 3))
+                sns.barplot(data=neighbors_df, x="Similarity", y=label_col, ax=ax, palette="viridis")
+                ax.set_title("Mức độ tương đồng (Càng dài càng giống)")
+                st.pyplot(fig)
+            st.dataframe(neighbors_df)
+            
+        with tab3:
+            st.markdown("#### Bước 3: Chi tiết các thành phần đóng góp")
+            step3 = data["step3_data"]
+            details_df = pd.DataFrame(step3["details"])
+            st.dataframe(details_df)
+            if step3["mode"] == "means":
+                st.info("Chế độ **Means**: Điều chỉnh bằng cách cộng trừ độ lệch so với điểm trung bình của láng giềng, giúp cân bằng giữa người dễ tính và khó tính.")
+            elif step3["mode"] == "biased_baseline":
+                st.info("Chế độ **Biased Baseline**: Sử dụng Global Mean, User Bias và Item Bias để làm mốc nền, sau đó mới cộng thêm sai số từ các láng giềng.")
+            else:
+                st.info("Chế độ **Basic**: Tính trung bình có trọng số trực tiếp từ điểm đánh giá của láng giềng.")
+            
+        with tab4:
+            st.markdown("#### Bước 4: Công thức tổng hợp & Dự đoán")
+            step4 = data["step4_data"]
+            if "user_mean" in step4["formula_data"]:
+                st.write(f"**Mean của User hiện tại:** {step4['formula_data']['user_mean']:.2f}")
+            if "user_bias" in step4["formula_data"]:
+                st.write(f"**Bias của User hiện tại:** {step4['formula_data']['user_bias']:.2f}")
+            if "item_bias" in step4["formula_data"]:
+                st.write(f"**Bias của Phim hiện tại:** {step4['formula_data']['item_bias']:.2f}")
+                
+            st.markdown(step4["formula_data"]["formula_latex"])
+            if "formula_note" in step4["formula_data"]:
+                st.markdown(step4["formula_data"]["formula_note"])
+            st.success(f"🎉 **Kết quả dự đoán cuối cùng: {step4['pred']:.2f} Sao**")
+        
+    else:
+        st.info("💡 **Gợi ý dựa trên Phân rã Ma trận (SVD)**: Tách User và Item thành các vector Đặc trưng ẩn (Latent Factors), sau đó khớp chúng lại với nhau để tìm sự đồng điệu.")
+        
+        tab1, tab2, tab3 = st.tabs(["1️⃣ Tách Bias", "2️⃣ Khớp Đặc trưng", "3️⃣ Dự đoán"])
+        
+        with tab1:
+            st.markdown("#### Bước 1: Các thành phần mốc nền (Baseline Bias)")
+            st.markdown("Đây là các yếu tố tĩnh không phụ thuộc vào độ tương đồng, đại diện cho xu hướng chung.")
+            step1 = data["step1_data"]
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Global Mean ($\\mu$)", f"{step1['mu']:.4f}", "Trung bình toàn hệ thống")
+            c2.metric("User Bias ($b_u$)", f"{step1['b_u']:.4f}", "User này dễ/khó tính hơn mức TB")
+            c3.metric("Item Bias ($b_i$)", f"{step1['b_i']:.4f}", "Phim này hay/dở hơn mức TB")
+            
+        with tab2:
+            st.markdown("#### Bước 2: Không gian Đặc trưng ẩn (Latent Factors)")
+            step2 = data["step2_data"]
+            factors_df = pd.DataFrame(step2["factors_data"])
+            
+            if not factors_df.empty:
+                fig, ax = plt.subplots(figsize=(8, 4))
+                ax.plot(factors_df["Factor"], factors_df["User Feature (P_u)"], label="User Vector ($P_u$)", marker='o', linewidth=2)
+                ax.plot(factors_df["Factor"], factors_df["Item Feature (Q_i)"], label="Item Vector ($Q_i$)", marker='s', linewidth=2)
+                ax.axhline(0, color='grey', linestyle='--', alpha=0.5)
+                
+                for idx, row in factors_df.iterrows():
+                    match = row["Match (P_u * Q_i)"]
+                    color = 'green' if match > 0 else 'red'
+                    ax.bar(row["Factor"], match, width=0.2, color=color, alpha=0.4, label="Match" if idx == 0 else "")
+                    
+                ax.set_title("So sánh Đặc trưng User và Item (Thanh xanh/đỏ thể hiện độ khớp)")
+                ax.legend()
+                st.pyplot(fig)
+            
+            st.dataframe(factors_df)
+            
+        with tab3:
+            st.markdown("#### Bước 3: Công thức Tích vô hướng & Tổng hợp")
+            step3 = data["step3_data"]
+            st.write(f"**Tổng giá trị khớp (Tích vô hướng $P_u \\cdot Q_i$):** {step3['dot_product']:.4f}")
+            st.markdown(step3["formula_latex"])
+            st.success(f"🎉 **Kết quả dự đoán cuối cùng: {step3['pred']:.2f} Sao**")
 
 # ==========================================
 # THANH ĐIỀU HƯỚNG BÊN TRÁI (SIDEBAR)
@@ -346,7 +459,6 @@ if page == "Trang Chủ (Khám Phá)":
     
     # 1. Phim Dành Cho Bạn (For You)
     st.header(f"✨ Dành Cho Bạn, User {current_user}")
-    st.markdown("*(Số sao hiển thị bên dưới là điểm số **dự đoán** mà thuật toán SVD nghĩ bạn sẽ chấm cho phim này)*")
 
     # Lấy thêm để có thể mở rộng (lấy top 20)
     user_recs = get_svd_recommendations(current_user, top_n=20)
@@ -360,7 +472,7 @@ if page == "Trang Chủ (Khám Phá)":
     
     # 2. Phim Thịnh Hành (Trending)
     st.header("🔥 Phim Đang Thịnh Hành")
-    popular_movies = get_popular_movies(top_n=20)
+    popular_movies = get_popular_movies(current_user, top_n=20)
     render_expandable_grid(popular_movies, tmdb_key, "trending")
         
     st.markdown("---")
@@ -375,7 +487,7 @@ if page == "Trang Chủ (Khám Phá)":
     if selected_movie_str:
         selected_id = int(selected_movie_str.split(" - ")[0])
         st.subheader("Khán giả xem phim này cũng thích:")
-        similar_movies = get_similar_movies(selected_id, top_n=20)
+        similar_movies = get_similar_movies(current_user, selected_id, top_n=20)
         if similar_movies:
             render_expandable_grid(similar_movies, tmdb_key, "similar")
         else:
@@ -403,7 +515,7 @@ elif page == "Đánh giá của người dùng":
                 for item_idx in rated_items:
                     rating = train_matrix[user_idx, item_idx]
                     name = movie_titles.get(int(item_idx) + 1, f"Phim {item_idx + 1}")
-                    history_list.append({"title": name, "score": f"Đã chấm: {rating} ⭐"})
+                    history_list.append({"title": name, "score": f"Đã chấm: {rating} ⭐", "movie_id": int(item_idx) + 1})
                 history_list.sort(key=lambda x: float(x['score'].split(': ')[1].split(' ')[0]), reverse=True)
                 
                 view_mode = st.radio("Chế độ hiển thị", ["Danh sách mở rộng (Có hình ảnh)", "Danh sách rút gọn"], horizontal=True)
@@ -412,6 +524,8 @@ elif page == "Đánh giá của người dùng":
                     render_movie_grid(history_list, tmdb_key, cols_count=5)
                 else:
                     df_history = pd.DataFrame(history_list)
+                    if 'movie_id' in df_history.columns:
+                        df_history = df_history.drop(columns=['movie_id'])
                     df_history.columns = ['Tên Phim', 'Điểm Đánh Giá']
                     # Sắp xếp lại chỉ số rank
                     df_history.index = np.arange(1, len(df_history) + 1)
@@ -464,9 +578,9 @@ elif page == "Dành Cho Developer":
     _, center_col, _ = st.columns([1, 6, 1])
     
     with center_col:
-        st.title("⚙️ Bảng Điều Khiển & Đánh Giá Thuật Toán")
+        st.title("Bảng Điều Khiển & Đánh Giá Thuật Toán")
         
-        tab1, tab2, tab3 = st.tabs(["📊 Trực Quan Hóa Dữ Liệu", "📈 Đánh Giá Hiệu Năng", "🧪 So Sánh Thuật Toán"])
+        tab1, tab2, tab3 = st.tabs(["Trực Quan Hóa Dữ Liệu", "Phân tích và Đánh giá Mô hình", "So Sánh Thuật Toán"])
         
         with tab1:
             st.header("Khám Phá Cơ Chế Các Thuật Toán Gợi Ý")
@@ -534,6 +648,14 @@ elif page == "Dành Cho Developer":
                 
         with tab2:
             st.header("So Sánh Độ Lệch Sai Số (MAE/RMSE)")
+            st.markdown("""
+            **Các tiêu chí đánh giá:**
+            - **MAE (Mean Absolute Error):** Trung bình giá trị tuyệt đối của sai số. Càng nhỏ càng tốt.
+            - **RMSE (Root Mean Square Error):** Căn bậc hai của trung bình bình phương sai số. Xử phạt các sai số lớn. Càng nhỏ càng tốt.
+            - **Precision@K:** Tỷ lệ phim đúng sở thích trong top K gợi ý. Càng lớn càng tốt.
+            - **Recall@K:** Tỷ lệ bao phủ các phim yêu thích trong top K gợi ý. Càng lớn càng tốt.
+            - **Tốc độ:** Thời gian trung bình để tính toán dự đoán cho 1 user (giây). Càng nhỏ càng tốt.
+            """)
             
             if svd_model and len(svd_model.history.get('epoch', [])) > 0:
                 fig, ax = plt.subplots(figsize=(5, 3))
@@ -549,10 +671,18 @@ elif page == "Dành Cho Developer":
                 st.info("Chưa có dữ liệu lịch sử huấn luyện SVD.")
                     
             st.markdown("---")
-            if st.button("📊 Chạy So Sánh Thuật Toán"):
+            if st.button("Chạy So Sánh Thuật Toán"):
                 with st.spinner("Đang tính toán đánh giá..."):
                     # Sử dụng Global Baseline làm mốc so sánh
                     baseline_model = item_cf.baseline_predictor
+                    
+                    prec_user, rec_user = compute_precision_recall_at_k(train_matrix, test_matrix, user_cf)
+                    prec_item, rec_item = compute_precision_recall_at_k(train_matrix, test_matrix, item_cf)
+                    prec_svd, rec_svd = compute_precision_recall_at_k(train_matrix, test_matrix, svd_model)
+                    
+                    time_user = compute_prediction_time(test_matrix, user_cf)
+                    time_item = compute_prediction_time(test_matrix, item_cf)
+                    time_svd = compute_prediction_time(test_matrix, svd_model)
                     
                     eval_data = {
                         'Thuật toán': ['Global Baseline', 'User-Based (Biased)', 
@@ -568,12 +698,15 @@ elif page == "Dành Cho Developer":
                             compute_rmse(test_matrix, user_cf),
                             compute_rmse(test_matrix, item_cf),
                             compute_rmse(test_matrix, svd_model)
-                        ]
+                        ],
+                        'Precision@10': [0.0, prec_user, prec_item, prec_svd],
+                        'Recall@10': [0.0, rec_user, rec_item, rec_svd],
+                        'Tốc độ (s/user)': [0.0, time_user, time_item, time_svd]
                     }
                     eval_df = pd.DataFrame(eval_data)
                     eval_df.set_index('Thuật toán', inplace=True)
-                    st.markdown("**Bảng So Sánh Sai Số Dự Đoán trên Test Set**")
-                    st.dataframe(eval_df.style.highlight_min(axis=0, color='lightgreen').format("{:.4f}"))
+                    st.markdown("**Bảng So Sánh Hiệu Năng trên Test Set**")
+                    st.dataframe(eval_df.style.highlight_min(subset=['MAE', 'RMSE', 'Tốc độ (s/user)'], color='lightgreen').highlight_max(subset=['Precision@10', 'Recall@10'], color='lightgreen').format("{:.4f}"))
 
         with tab3:
             st.header("So Sánh Gợi Ý Trực Tiếp")
@@ -590,12 +723,12 @@ elif page == "Dành Cho Developer":
                 
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
-                if st.button("🔍 Gợi ý phim", use_container_width=True):
+                if st.button("Gợi ý phim", use_container_width=True):
                     st.session_state.show_comparison_details = False # Reset chi tiết
                     st.session_state.run_basic_comparison = True
             with col_btn2:
                 if st.session_state.get("run_basic_comparison", False):
-                    if st.button("Xem chi tiết so sánh", use_container_width=True):
+                    if st.button("So sánh chi tiết", use_container_width=True):
                         st.session_state.show_comparison_details = True
             
             # Logic chạy dự đoán
@@ -618,22 +751,53 @@ elif page == "Dành Cho Developer":
                             top_svd_idx = unviewed_items[np.argsort(preds_svd)[-top_k:][::-1]]
                             
                             if not st.session_state.get("show_comparison_details", False):
-                                # Hiển thị SVD mặc định
                                 st.subheader(f"Kết quả gợi ý từ SVD ({top_k} phim):")
                                 user_recs = []
                                 top_scores = preds_svd[np.argsort(preds_svd)[-top_k:][::-1]]
                                 for rank, (idx, score) in enumerate(zip(top_svd_idx, top_scores), 1):
                                     name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
-                                    user_recs.append({"title": name, "score": f"{score:.2f} ⭐", "rank": rank})
+                                    user_recs.append({"title": name, "score": f"{score:.2f} ⭐", "rank": rank, "movie_id": int(idx) + 1})
                                 render_movie_grid(user_recs, tmdb_key, cols_count=5)
+                                
+                                # --- User-Based CF (Means) ---
+                                temp_user_cf_means = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode='means')
+                                temp_user_cf_means.train_matrix = user_cf.train_matrix
+                                temp_user_cf_means.similarity_matrix = user_cf.similarity_matrix
+                                temp_user_cf_means.user_means = user_cf.user_means
+                                preds_user_means = temp_user_cf_means.predict_batch(user_idx, unviewed_items)
+                                top_user_idx_means = unviewed_items[np.argsort(preds_user_means)[-top_k:][::-1]]
+                                top_scores_user = preds_user_means[np.argsort(preds_user_means)[-top_k:][::-1]]
+
+                                st.subheader(f"Kết quả gợi ý từ User-Based CF (Means) ({top_k} phim):")
+                                user_recs_means = []
+                                for rank, (idx, score) in enumerate(zip(top_user_idx_means, top_scores_user), 1):
+                                    name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
+                                    user_recs_means.append({"title": name, "score": f"{score:.2f} ⭐", "rank": rank, "movie_id": int(idx) + 1})
+                                render_movie_grid(user_recs_means, tmdb_key, cols_count=5)
+
+                                # --- Item-Based CF (Basic) ---
+                                temp_item_cf_basic = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors, prediction_mode='basic')
+                                temp_item_cf_basic.train_matrix = item_cf.train_matrix
+                                temp_item_cf_basic.similarity_matrix = item_cf.similarity_matrix
+                                preds_item_basic = temp_item_cf_basic.predict_batch(user_idx, unviewed_items)
+                                top_item_idx_basic = unviewed_items[np.argsort(preds_item_basic)[-top_k:][::-1]]
+                                top_scores_item = preds_item_basic[np.argsort(preds_item_basic)[-top_k:][::-1]]
+
+                                st.subheader(f"Kết quả gợi ý từ Item-Based CF (Basic) ({top_k} phim):")
+                                item_recs_basic = []
+                                for rank, (idx, score) in enumerate(zip(top_item_idx_basic, top_scores_item), 1):
+                                    name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
+                                    item_recs_basic.append({"title": name, "score": f"{score:.2f} ⭐", "rank": rank, "movie_id": int(idx) + 1})
+                                render_movie_grid(item_recs_basic, tmdb_key, cols_count=5)
+                                
                             else:
                                 st.markdown("---")
                                 st.subheader("Chi Tiết So Sánh 3 Thuật Toán")
                                 c1, c2, c3 = st.columns(3)
                                 
                                 with c1:
-                                    st.markdown("### 👤 User-Based CF")
-                                    user_cf_mode = st.selectbox("Phương pháp:", ["biased_baseline", "means"], key="user_cf_mode")
+                                    st.markdown("### User-Based CF")
+                                    user_cf_mode = st.selectbox("Phương pháp:", ["basic", "means", "biased_baseline"], key="user_cf_mode")
                                     
                                     # Tạo instance tạm để chạy mode khác
                                     temp_user_cf = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode=user_cf_mode)
@@ -648,11 +812,13 @@ elif page == "Dành Cho Developer":
                                     
                                     for rank, idx in enumerate(t_top_user_idx, 1):
                                         name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
-                                        st.markdown(f"**{rank}.** {name}")
+                                        with st.expander(f"**{rank}.** {name} (ID: {int(idx)+1}) - Xem chi tiết"):
+                                            viz_data = AlgorithmExplainer.get_user_based_viz_data(temp_user_cf, user_idx, idx, movie_titles)
+                                            render_visualizer("User-Based CF", viz_data)
                                         
                                 with c2:
-                                    st.markdown("### 📦 Item-Based CF")
-                                    item_cf_mode = st.selectbox("Phương pháp:", ["biased_baseline", "pure"], key="item_cf_mode")
+                                    st.markdown("### Item-Based CF")
+                                    item_cf_mode = st.selectbox("Phương pháp:", ["basic", "biased_baseline"], key="item_cf_mode")
                                     
                                     temp_item_cf = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors, prediction_mode=item_cf_mode)
                                     temp_item_cf.train_matrix = item_cf.train_matrix
@@ -665,11 +831,15 @@ elif page == "Dành Cho Developer":
                                     
                                     for rank, idx in enumerate(t_top_item_idx, 1):
                                         name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
-                                        st.markdown(f"**{rank}.** {name}")
+                                        with st.expander(f"**{rank}.** {name} (ID: {int(idx)+1}) - Xem chi tiết"):
+                                            viz_data = AlgorithmExplainer.get_item_based_viz_data(temp_item_cf, user_idx, idx, movie_titles)
+                                            render_visualizer("Item-Based CF", viz_data)
                                         
                                 with c3:
-                                    st.markdown("### 🧠 SVD")
+                                    st.markdown("### SVD")
                                     st.markdown("*Matrix Factorization*")
                                     for rank, idx in enumerate(top_svd_idx, 1):
                                         name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
-                                        st.markdown(f"**{rank}.** {name}")
+                                        with st.expander(f"**{rank}.** {name} (ID: {int(idx)+1}) - Xem chi tiết"):
+                                            viz_data = AlgorithmExplainer.get_svd_viz_data(svd_model, user_idx, idx, movie_titles)
+                                            render_visualizer("SVD", viz_data)

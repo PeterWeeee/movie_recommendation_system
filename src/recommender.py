@@ -57,7 +57,7 @@ class UserBasedCollaborativeFiltering:
     """
     def __init__(self, k_neighbors: int = 40, prediction_mode: str = 'means') -> None:
         """
-        prediction_mode: 'means' (KNN with Means) hoặc 'biased_baseline' (KNN with Biased Baseline)
+        prediction_mode: 'basic', 'means' (KNN with Means) hoặc 'biased_baseline' (KNN with Biased Baseline)
         """
         self.k_neighbors = k_neighbors
         self.prediction_mode = prediction_mode
@@ -114,6 +114,9 @@ class UserBasedCollaborativeFiltering:
             b_vi = np.array([self.baseline_predictor.predict_rating(v, item_idx) for v in top_other_users])
             rating_diffs = ratings - b_vi
             predicted_rating = b_ui + (np.sum(top_similarities * rating_diffs) / sim_sum)
+        elif self.prediction_mode == 'basic':
+            # KNN Basic
+            predicted_rating = np.sum(top_similarities * ratings) / sim_sum
         else:
             # KNN with Means
             means = self.user_means[top_other_users]
@@ -153,6 +156,8 @@ class UserBasedCollaborativeFiltering:
                 b_vi = np.clip(self.baseline_predictor.mu + self.baseline_predictor.b_u[top_users] + self.baseline_predictor.b_i[item], 1.0, 5.0)
                 rating_diffs = item_ratings - b_vi
                 preds[idx] = b_ui + (np.sum(top_sims * rating_diffs) / sim_sum)
+            elif self.prediction_mode == 'basic':
+                preds[idx] = np.sum(top_sims * item_ratings) / sim_sum
             else:
                 means = self.user_means[top_users]
                 rating_diffs = item_ratings - means

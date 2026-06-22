@@ -30,5 +30,11 @@ Dưới đây là đề xuất thiết kế kiến trúc phân tầng chuyên ng
    * **Bước 5**: Vector DB trả về Top-N `item_id`.
    * **Bước 6**: Backend map `item_id` với PostgreSQL để lấy tên phim, ảnh bìa trả về cho App.
 
+3. **Online Evaluation & Monitoring (Giám sát & Đánh giá A/B Testing)**:
+   * Thu thập log tương tác thực tế của người dùng (Click, Watch, Rating).
+   * Đo lường các chỉ số xếp hạng (Ranking Quality) theo thời gian thực như **Precision@K**, **Recall@K**, và **Hit Rate**.
+   * Liên tục theo dõi **Tốc độ dự đoán (Latency)** để đảm bảo DB Vector luôn phản hồi dưới ngưỡng mili-giây, không gây "thắt cổ chai" (bottleneck).
+   * Chạy A/B Testing để so sánh hiệu quả của SVD phiên bản mới so với phiên bản cũ trước khi triển khai (roll-out) toàn bộ.
+
 ---
-*Mô hình này giúp hệ thống chịu tải tốt, tìm kiếm cực nhanh và đảm bảo tính cá nhân hóa theo đúng lý thuyết của Lọc cộng tác SVD.*
+*Mô hình này giúp hệ thống chịu tải tốt, tìm kiếm cực nhanh và đảm bảo tính cá nhân hóa theo đúng lý thuyết của Lọc cộng tác SVD, đồng thời dễ dàng đo lường sự thành công thông qua các chỉ số Ranking thực tế.*

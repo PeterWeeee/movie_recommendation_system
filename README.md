@@ -16,11 +16,18 @@ movie_recommendation_system/
 │   └── processed/             # Lưu trữ ma trận Train/Test dưới dạng nhị phân (.npy)
 │                              # Giúp hệ thống nạp dữ liệu tức thì, bỏ qua bước đọc file text thô
 │
+├── docs/                    # Thư mục chứa tài liệu mô tả hệ thống
+│   ├── algorithm_comparison_plan.md
+│   ├── app_upgrade.md
+│   ├── production_architecture.md
+│   └── system_principles.md
+│
 ├── models/                    # Lưu trữ các file trọng số (.pkl) của tất cả các mô hình sau khi huấn luyện
 │
 ├── notebooks/                 # Không gian nghiên cứu và trực quan hóa dữ liệu thô
 │   ├── 01_data_exploration.ipynb      # Xuất báo cáo đồ thị EDA độ phân giải cao
-│   └── 02_library_verification.ipynb # Đối chứng kết quả MAE/RMSE với thư viện scikit-surprise
+│   ├── 02_library_verification.ipynb  # Đối chứng kết quả MAE/RMSE với thư viện scikit-surprise
+│   └── 03_inspect_matrix.ipynb        # Công cụ tương tác xem ma trận dữ liệu Train/Test
 │
 ├── scripts/                   # Các script thực thi Pipeline
 │   └── train_pipeline.py      # Tiền xử lý dữ liệu, huấn luyện mô hình (SVD, CF, Content-Based) và lưu file .pkl
@@ -39,8 +46,6 @@ movie_recommendation_system/
 │
 ├── app.py                     # Giao diện Web tương tác thông minh (Streamlit), dùng Hybrid Architecture
 ├── main.py                    # Ứng dụng gợi ý Terminal-based siêu tốc
-├── production_architecture.md # Tài liệu mô tả kiến trúc hệ thống production
-├── system_principles.md       # Tài liệu mô tả nguyên lý hoạt động các thuật toán
 ├── requirements.txt           # Danh sách quản lý các thư viện phụ thuộc của dự án
 └── .gitignore                 # Tệp cấu hình Git để loại bỏ các tệp tin rác và dữ liệu nặng khi lên GitHub
 ```
@@ -135,15 +140,15 @@ python -m pytest tests/ -v
 | Matrix Factorization SVD | 0.9362 | 0.7407 |
 
 > Đối chiếu tham khảo từ thư viện `scikit-surprise` (notebook `02_library_verification.ipynb`):
-> KNNBaseline User-Based: RMSE 0.9197 / MAE 0.7190 — KNNBaseline Item-Based: RMSE 0.9169 / MAE 0.7188
+> KNNWithMeans User-Based: RMSE 0.9197 / MAE 0.7190 — KNNWithMeans Item-Based: RMSE 0.9169 / MAE 0.7188
 
 ## 6. Chức Năng Giao Diện
 
 - 🏠 **Trang Chủ (Khám Phá)**: Trải nghiệm ứng dụng thực tế với danh sách phim "Dành Cho Bạn" (cá nhân hóa bằng SVD), "Đang Thịnh Hành" (dựa trên chất lượng nội tại từ Biased Predictor), và tìm kiếm "Phim Tương Tự" (Item-Based CF). Tích hợp TMDB API để hiển thị ảnh bìa phim trực quan, sinh động.
-- ⚙️ **Dành Cho Developer**: Không gian phân tích kỹ thuật chuyên sâu với 3 tab:
-  - 📊 **Trực Quan Hóa Dữ Liệu**: Biểu đồ độ thưa thớt (Sparsity), hiện tượng Long-Tail, và không gian đặc trưng ẩn 2D của SVD (PCA).
-  - 📈 **Đánh Giá Hiệu Năng**: Đồ thị Training Loss của SVD và bảng so sánh MAE/RMSE giữa các thuật toán.
-  - 🧪 **So Sánh Thuật Toán**: So sánh song song top phim gợi ý từ các thuật toán khác nhau (User-Based, Item-Based, SVD) cho cùng một User.
+- **Dành Cho Developer**: Không gian phân tích kỹ thuật chuyên sâu với 3 tab:
+  - **Trực Quan Hóa Dữ Liệu**: Biểu đồ độ thưa thớt (Sparsity), hiện tượng Long-Tail, và không gian đặc trưng ẩn 2D của SVD (PCA).
+  - **Phân tích và Đánh giá Mô hình**: Đồ thị Training Loss của SVD và bảng so sánh MAE, RMSE, Precision@K, Recall@K, và Tốc độ dự đoán giữa các thuật toán.
+  - **So Sánh Thuật Toán**: So sánh song song top phim gợi ý từ các thuật toán khác nhau (User-Based, Item-Based, SVD) cho cùng một User.
 
 ## 7. Thư Viện Sử Dụng
 

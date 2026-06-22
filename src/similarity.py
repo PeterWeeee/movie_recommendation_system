@@ -39,7 +39,9 @@ def compute_pearson_similarity(matrix: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(mean_centered, axis=1)
     norm_matrix = norms[:, np.newaxis].dot(norms[np.newaxis, :])
     
-    return dot_product / (norm_matrix + epsilon)
+    raw_sim = dot_product / (norm_matrix + epsilon)
+    
+    return raw_sim
 
 def compute_adjusted_cosine_similarity(matrix: np.ndarray) -> np.ndarray:
     """
@@ -68,4 +70,6 @@ def compute_adjusted_cosine_similarity(matrix: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(item_matrix, axis=1)
     norm_matrix = norms[:, np.newaxis].dot(norms[np.newaxis, :])
     
-    return dot_product / (norm_matrix + epsilon)
+    raw_sim = dot_product / (norm_matrix + epsilon)
+    
+    return raw_sim
