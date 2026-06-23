@@ -155,7 +155,10 @@ python -m pytest tests/ -v
 - 👨‍💻 **Dành Cho Developer**: Không gian phân tích kỹ thuật chuyên sâu với 3 tab:
   - **Trực Quan Hóa Dữ Liệu**: Biểu đồ độ thưa thớt (Sparsity), hiện tượng Long-Tail, và không gian đặc trưng ẩn 2D của SVD (PCA).
   - **Phân tích và Đánh giá Mô hình**: Đồ thị Training Loss của SVD và bảng so sánh MAE, RMSE, Precision@K, Recall@K, và Tốc độ dự đoán giữa các thuật toán.
-  - **So Sánh Thuật Toán**: So sánh song song top phim gợi ý từ các thuật toán khác nhau (User-Based, Item-Based, SVD) cho cùng một User.
+  - **So Sánh Thuật Toán**: So sánh song song top phim gợi ý từ các thuật toán khác nhau (User-Based, Item-Based, SVD) cho cùng một User, kèm theo giải thích chi tiết các bước thuật toán đã làm khi gợi ý phim:
+    - **User-Based CF**: Trích xuất dữ liệu nền, tìm láng giềng tương đồng (những người dùng giống nhau), điều chỉnh sai số và tổng hợp thành dự đoán.
+    - **Item-Based CF**: Đánh giá dựa trên độ tương đồng giữa các bộ phim, trích xuất ma trận con, và tính toán dự đoán từ các phim láng giềng.
+    - **SVD (Matrix Factorization)**: Tách các thành phần mốc nền (Bias), khớp không gian đặc trưng ẩn (Latent Factors) giữa User và Item, rồi dùng công thức tích vô hướng để đưa ra điểm dự đoán cuối cùng.
 
 ## 7. Thư Viện Sử Dụng
 
@@ -168,3 +171,17 @@ Xem chi tiết tại [`requirements.txt`](requirements.txt):
 - `seaborn` — Biểu đồ thống kê nâng cao
 - `scikit-learn` — PCA để trực quan hóa latent features của SVD
 - `scikit-surprise` — Thư viện đối chứng kết quả thuật toán (notebook verification)
+
+## 8. Phân Tích Kỹ Thuật
+
+- **Cold Start (Khởi động lạnh)**:
+  - Hệ thống gặp khó khăn khi gợi ý cho người dùng mới (chưa có đánh giá nào) hoặc phim mới (chưa ai đánh giá).
+  - *Giải pháp*: Sử dụng Content-Based Filtering cho phim mới (dựa vào thể loại, đạo diễn), hoặc dùng Popularity-based/Global Baseline để gợi ý cho người dùng mới. Hiện tại hệ thống kết hợp gợi ý "Đang Thịnh Hành" cho user mới.
+
+- **Sparsity (Độ thưa thớt dữ liệu)**:
+  - Ma trận User-Item trong thực tế thường có độ thưa thớt rất cao (trên 90%). Trong MovieLens 100k, độ thưa thớt khoảng 93.7%.
+  - *Giải pháp*: Thuật toán Matrix Factorization (SVD) thể hiện ưu điểm vượt trội so với Memory-based CF trong việc xử lý ma trận thưa do khả năng xấp xỉ các giá trị bị khuyết thông qua latent features.
+
+- **Scalability (Khả năng mở rộng)**:
+  - Thuật toán Memory-based (User/Item CF) gặp hạn chế về bộ nhớ và thời gian tính toán khi số lượng người dùng/phim tăng lên mức hàng triệu do phải tính toán và lưu trữ ma trận độ tương đồng kích thước lớn ($O(N^2)$ hoặc $O(M^2)$).
+  - *Giải pháp*: Sử dụng Model-based CF (SVD) giúp việc dự đoán ở thời gian thực nhanh chóng do chỉ cần tính tích vô hướng của 2 vector latent nhỏ gọn. Bước huấn luyện tốn kém có thể chạy offline định kỳ.

@@ -36,8 +36,12 @@ def compute_pearson_similarity(matrix: np.ndarray) -> np.ndarray:
     mean_centered[mask] = matrix[mask] - mean_matrix[mask]
     
     dot_product = mean_centered.dot(mean_centered.T)
-    norms = np.linalg.norm(mean_centered, axis=1)
-    norm_matrix = norms[:, np.newaxis].dot(norms[np.newaxis, :])
+    
+    # Tính norm chỉ trên các item cùng được đánh giá (co-rated items)
+    sq_matrix = mean_centered ** 2
+    norm_u_sq = sq_matrix.dot(mask.T)
+    norm_v_sq = mask.dot(sq_matrix.T)
+    norm_matrix = np.sqrt(norm_u_sq * norm_v_sq)
     
     raw_sim = dot_product / (norm_matrix + epsilon)
     
@@ -67,8 +71,13 @@ def compute_adjusted_cosine_similarity(matrix: np.ndarray) -> np.ndarray:
     item_matrix = mean_centered.T
     
     dot_product = item_matrix.dot(item_matrix.T)
-    norms = np.linalg.norm(item_matrix, axis=1)
-    norm_matrix = norms[:, np.newaxis].dot(norms[np.newaxis, :])
+    
+    # Tính norm chỉ trên các user cùng đánh giá cả 2 item (co-rated users)
+    mask_item = mask.T
+    sq_matrix_item = item_matrix ** 2
+    norm_i_sq = sq_matrix_item.dot(mask_item.T)
+    norm_j_sq = mask_item.dot(sq_matrix_item.T)
+    norm_matrix = np.sqrt(norm_i_sq * norm_j_sq)
     
     raw_sim = dot_product / (norm_matrix + epsilon)
     

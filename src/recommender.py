@@ -53,198 +53,254 @@ class BiasedPredictor:
 class UserBasedCollaborativeFiltering:
     """
     Hệ thống gợi ý Lọc cộng tác dựa trên Người dùng (User-based Collaborative Filtering).
-    Sử dụng phương pháp K-Người láng giềng gần nhất (KNN).
+    Hỗ trợ 2 loại similarity: Cosine và Pearson.
+    Mặc định prediction dùng trung bình có trọng số (weighted average) thuần túy.
     """
-    def __init__(self, k_neighbors: int = 40, prediction_mode: str = 'means') -> None:
+    def __init__(self, k_neighbors: int = 40, prediction_mode: str = 'basic') -> None:
         """
-        prediction_mode: 'basic', 'means' (KNN with Means) hoặc 'biased_baseline' (KNN with Biased Baseline)
+        prediction_mode: 'basic' (weighted average thuần), 'means' (KNN with Means),
+                         'biased_baseline' (KNN with Biased Baseline) - giữ để tương thích ngược
         """
         self.k_neighbors = k_neighbors
         self.prediction_mode = prediction_mode
         self.train_matrix: Optional[np.ndarray] = None
+        # Lưu 2 similarity matrix riêng biệt
+        self.cosine_similarity_matrix: Optional[np.ndarray] = None
+        self.pearson_similarity_matrix: Optional[np.ndarray] = None
+        # Matrix đang được dùng
         self.similarity_matrix: Optional[np.ndarray] = None
         self.user_means: Optional[np.ndarray] = None
         self.baseline_predictor: Optional[BiasedPredictor] = None
 
-    def fit(self, train_matrix: np.ndarray, similarity_matrix: np.ndarray) -> None:
-        self.train_matrix = train_matrix
-        self.similarity_matrix = similarity_matrix
-        
+    def _compute_user_means(self, train_matrix: np.ndarray) -> None:
         mask = train_matrix > 0
         user_counts = mask.sum(axis=1)
         self.user_means = np.zeros(train_matrix.shape[0])
         valid_users = user_counts > 0
         self.user_means[valid_users] = train_matrix.sum(axis=1)[valid_users] / user_counts[valid_users]
 
+    def fit(self, train_matrix: np.ndarray, similarity_matrix: np.ndarray) -> None:
+        """Fit với Pearson similarity (mặc định, tương thích ngược)."""
+        self.train_matrix = train_matrix
+        self.pearson_similarity_matrix = similarity_matrix
+        self.similarity_matrix = similarity_matrix
+        self._compute_user_means(train_matrix)
         if self.prediction_mode == 'biased_baseline':
             self.baseline_predictor = BiasedPredictor()
             self.baseline_predictor.fit(train_matrix)
 
+    def fit_both(self, train_matrix: np.ndarray,
+                 cosine_sim: np.ndarray,
+                 pearson_sim: np.ndarray) -> None:
+        """Fit với cả 2 loại similarity matrix."""
+        self.train_matrix = train_matrix
+        self.cosine_similarity_matrix = cosine_sim
+        self.pearson_similarity_matrix = pearson_sim
+        self.similarity_matrix = pearson_sim  # mặc định dùng pearson
+        self._compute_user_means(train_matrix)
+
+    def use_cosine(self) -> None:
+        """Chuyển sang dùng Cosine similarity."""
+        assert self.cosine_similarity_matrix is not None, "Chưa có Cosine similarity matrix. Hãy gọi fit_both()."
+        self.similarity_matrix = self.cosine_similarity_matrix
+
+    def use_pearson(self) -> None:
+        """Chuyển sang dùng Pearson similarity."""
+        assert self.pearson_similarity_matrix is not None, "Chưa có Pearson similarity matrix."
+        self.similarity_matrix = self.pearson_similarity_matrix
+
     def predict_rating(self, user_idx: int, item_idx: int) -> float:
         assert self.train_matrix is not None and self.similarity_matrix is not None and self.user_means is not None, \
             "Model chưa được huấn luyện. Hãy gọi fit() trước."
-        
+
         if self.train_matrix[user_idx, item_idx] > 0:
             return self.train_matrix[user_idx, item_idx]
-            
+
         other_users = np.where(self.train_matrix[:, item_idx] > 0)[0]
-        
-        # Base rating để thay thế nếu chưa ai xem
         base_rating = self.user_means[user_idx] if self.user_means[user_idx] > 0 else 3.0
-        
+
         if len(other_users) == 0:
             return base_rating
-            
+
         similarities = self.similarity_matrix[user_idx, other_users]
-        
+        valid_mask = similarities > 0
+        if not np.any(valid_mask):
+            return base_rating
+
+        similarities = similarities[valid_mask]
+        other_users = other_users[valid_mask]
+
         top_indices = np.argsort(similarities)[::-1][:self.k_neighbors]
         top_similarities = similarities[top_indices]
         top_other_users = other_users[top_indices]
-        
-        sim_sum = np.sum(np.abs(top_similarities))
+
+        sim_sum = np.sum(top_similarities)
         if sim_sum == 0:
             return base_rating
-            
+
         ratings = self.train_matrix[top_other_users, item_idx]
-        
+
         if self.prediction_mode == 'biased_baseline' and self.baseline_predictor is not None:
-            # KNN with Biased Baseline
-            # Độ lệch = rating - b_vi
             b_ui = self.baseline_predictor.predict_rating(user_idx, item_idx)
             b_vi = np.array([self.baseline_predictor.predict_rating(v, item_idx) for v in top_other_users])
-            rating_diffs = ratings - b_vi
-            predicted_rating = b_ui + (np.sum(top_similarities * rating_diffs) / sim_sum)
-        elif self.prediction_mode == 'basic':
-            # KNN Basic
-            predicted_rating = np.sum(top_similarities * ratings) / sim_sum
-        else:
-            # KNN with Means
+            predicted_rating = b_ui + (np.sum(top_similarities * (ratings - b_vi)) / sim_sum)
+        elif self.prediction_mode == 'means':
             means = self.user_means[top_other_users]
-            rating_diffs = ratings - means
-            predicted_rating = self.user_means[user_idx] + (np.sum(top_similarities * rating_diffs) / sim_sum)
-        
+            predicted_rating = self.user_means[user_idx] + (np.sum(top_similarities * (ratings - means)) / sim_sum)
+        else:
+            # basic: weighted average thuần
+            predicted_rating = np.sum(top_similarities * ratings) / sim_sum
+
         return np.clip(predicted_rating, 1.0, 5.0)
 
     def predict_batch(self, user_idx: int, item_indices: np.ndarray) -> np.ndarray:
-        assert self.train_matrix is not None and self.similarity_matrix is not None and self.user_means is not None, "Model chưa được huấn luyện."
+        assert self.train_matrix is not None and self.similarity_matrix is not None and self.user_means is not None, \
+            "Model chưa được huấn luyện."
         preds = np.zeros(len(item_indices))
         base_rating = self.user_means[user_idx] if self.user_means[user_idx] > 0 else 3.0
-        
+
         for idx, item in enumerate(item_indices):
             other_users = np.where(self.train_matrix[:, item] > 0)[0]
             if len(other_users) == 0:
                 preds[idx] = base_rating
                 continue
-                
+
             similarities = self.similarity_matrix[user_idx, other_users]
-            # Sắp xếp giảm dần để lấy top-k tương đồng cao nhất (nhất quán với predict_rating)
+            valid_mask = similarities > 0
+            if not np.any(valid_mask):
+                preds[idx] = base_rating
+                continue
+
+            similarities = similarities[valid_mask]
+            other_users = other_users[valid_mask]
+
             top_k_idx = np.argsort(similarities)[::-1][:self.k_neighbors]
             top_sims = similarities[top_k_idx]
             top_users = other_users[top_k_idx]
-            
-            sim_sum = np.sum(np.abs(top_sims))
+
+            sim_sum = np.sum(top_sims)
             if sim_sum == 0:
                 preds[idx] = base_rating
                 continue
-                
+
             item_ratings = self.train_matrix[top_users, item]
-            
+
             if self.prediction_mode == 'biased_baseline' and self.baseline_predictor is not None:
                 assert self.baseline_predictor.b_u is not None and self.baseline_predictor.b_i is not None
-                # clip nhất quán với BiasedPredictor.predict_rating()
                 b_ui = float(np.clip(self.baseline_predictor.mu + self.baseline_predictor.b_u[user_idx] + self.baseline_predictor.b_i[item], 1.0, 5.0))
                 b_vi = np.clip(self.baseline_predictor.mu + self.baseline_predictor.b_u[top_users] + self.baseline_predictor.b_i[item], 1.0, 5.0)
-                rating_diffs = item_ratings - b_vi
-                preds[idx] = b_ui + (np.sum(top_sims * rating_diffs) / sim_sum)
-            elif self.prediction_mode == 'basic':
-                preds[idx] = np.sum(top_sims * item_ratings) / sim_sum
-            else:
+                preds[idx] = b_ui + (np.sum(top_sims * (item_ratings - b_vi)) / sim_sum)
+            elif self.prediction_mode == 'means':
                 means = self.user_means[top_users]
-                rating_diffs = item_ratings - means
-                preds[idx] = self.user_means[user_idx] + (np.sum(top_sims * rating_diffs) / sim_sum)
-                
+                preds[idx] = self.user_means[user_idx] + (np.sum(top_sims * (item_ratings - means)) / sim_sum)
+            else:
+                # basic: weighted average thuần
+                preds[idx] = np.sum(top_sims * item_ratings) / sim_sum
+
         return np.clip(preds, 1.0, 5.0)
 
 
 class ItemBasedCollaborativeFiltering:
     """
     Hệ thống gợi ý Lọc cộng tác dựa trên Item (Item-based Collaborative Filtering).
+    Hỗ trợ 2 loại similarity: Cosine và Adjusted Cosine.
+    Prediction luôn dùng trung bình có trọng số (weighted average) thuần túy.
     """
-    def __init__(self, k_neighbors: int = 40, prediction_mode: str = 'biased_baseline') -> None:
+    def __init__(self, k_neighbors: int = 40) -> None:
         self.k_neighbors = k_neighbors
-        self.prediction_mode = prediction_mode
+        self.prediction_mode = 'basic'
         self.train_matrix: Optional[np.ndarray] = None
+        # Lưu 2 similarity matrix riêng biệt
+        self.cosine_similarity_matrix: Optional[np.ndarray] = None
+        self.adjusted_cosine_similarity_matrix: Optional[np.ndarray] = None
+        # Matrix đang được dùng (trỏ về 1 trong 2 matrix trên)
         self.similarity_matrix: Optional[np.ndarray] = None
+        # Giữ lại baseline_predictor để tương thích ngược (không dùng trong prediction)
         self.baseline_predictor: Optional[BiasedPredictor] = None
 
     def fit(self, train_matrix: np.ndarray, similarity_matrix: np.ndarray) -> None:
+        """Fit với Adjusted Cosine similarity (mặc định, tương thích ngược)."""
         self.train_matrix = train_matrix
-        self.similarity_matrix = similarity_matrix
-        if self.prediction_mode == 'biased_baseline':
-            self.baseline_predictor = BiasedPredictor()
-            self.baseline_predictor.fit(train_matrix)
+        self.adjusted_cosine_similarity_matrix = similarity_matrix
+        self.similarity_matrix = similarity_matrix  # mặc định dùng adjusted cosine
+
+    def fit_both(self, train_matrix: np.ndarray,
+                 cosine_sim: np.ndarray,
+                 adjusted_cosine_sim: np.ndarray) -> None:
+        """Fit với cả 2 loại similarity matrix."""
+        self.train_matrix = train_matrix
+        self.cosine_similarity_matrix = cosine_sim
+        self.adjusted_cosine_similarity_matrix = adjusted_cosine_sim
+        self.similarity_matrix = adjusted_cosine_sim  # mặc định dùng adjusted cosine
+
+    def use_cosine(self) -> None:
+        """Chuyển sang dùng Cosine similarity."""
+        assert self.cosine_similarity_matrix is not None, "Chưa có Cosine similarity matrix. Hãy gọi fit_both()."
+        self.similarity_matrix = self.cosine_similarity_matrix
+
+    def use_adjusted_cosine(self) -> None:
+        """Chuyển sang dùng Adjusted Cosine similarity."""
+        assert self.adjusted_cosine_similarity_matrix is not None, "Chưa có Adjusted Cosine similarity matrix."
+        self.similarity_matrix = self.adjusted_cosine_similarity_matrix
 
     def predict_rating(self, user_idx: int, item_idx: int) -> float:
         assert self.train_matrix is not None and self.similarity_matrix is not None, "Model chưa được huấn luyện."
         if self.train_matrix[user_idx, item_idx] > 0:
             return float(self.train_matrix[user_idx, item_idx])
-            
+
         rated_items = np.where(self.train_matrix[user_idx, :] > 0)[0]
         if len(rated_items) == 0:
             return 3.0
-            
+
         similarities = self.similarity_matrix[item_idx, rated_items]
+        valid_mask = similarities > 0
+        if not np.any(valid_mask):
+            return 3.0
+
+        similarities = similarities[valid_mask]
+        rated_items = rated_items[valid_mask]
+
         top_k_idx = np.argsort(similarities)[-self.k_neighbors:]
         top_sims = similarities[top_k_idx]
         top_rated_items = rated_items[top_k_idx]
-        
-        sim_sum = np.sum(np.abs(top_sims))
+
+        sim_sum = np.sum(top_sims)
         if sim_sum == 0:
             return 3.0
-            
+
         ratings = self.train_matrix[user_idx, top_rated_items]
-        
-        if self.prediction_mode == 'biased_baseline' and self.baseline_predictor is not None:
-            b_ui = self.baseline_predictor.predict_rating(user_idx, item_idx)
-            b_uj = np.array([self.baseline_predictor.predict_rating(user_idx, j) for j in top_rated_items])
-            rating_diffs = ratings - b_uj
-            predicted_rating = b_ui + (np.sum(top_sims * rating_diffs) / sim_sum)
-        else:
-            predicted_rating = np.sum(top_sims * ratings) / sim_sum
+        # Trung bình có trọng số thuần túy (weighted average)
+        predicted_rating = np.sum(top_sims * ratings) / sim_sum
         return float(np.clip(predicted_rating, 1.0, 5.0))
 
     def predict_batch(self, user_idx: int, item_indices: np.ndarray) -> np.ndarray:
         assert self.train_matrix is not None and self.similarity_matrix is not None, "Model chưa được huấn luyện."
         preds = np.zeros(len(item_indices))
         rated_items = np.where(self.train_matrix[user_idx] > 0)[0]
-        
+
         if len(rated_items) == 0:
             return np.full(len(item_indices), 3.0)
-            
+
         ratings = self.train_matrix[user_idx, rated_items]
-        
+
         for idx, item in enumerate(item_indices):
             similarities = self.similarity_matrix[item, rated_items]
-            top_k_idx = np.argsort(similarities)[-self.k_neighbors:]
-            top_sims = similarities[top_k_idx]
-            top_ratings = ratings[top_k_idx]
-            
-            sim_sum = np.sum(np.abs(top_sims))
-            if sim_sum > 0:
-                if self.prediction_mode == 'biased_baseline' and self.baseline_predictor is not None:
-                    assert self.baseline_predictor.b_u is not None and self.baseline_predictor.b_i is not None
-                    b_ui = float(np.clip(self.baseline_predictor.mu + self.baseline_predictor.b_u[user_idx] + self.baseline_predictor.b_i[item], 1.0, 5.0))
-                    b_uj = np.clip(self.baseline_predictor.mu + self.baseline_predictor.b_u[user_idx] + self.baseline_predictor.b_i[rated_items[top_k_idx]], 1.0, 5.0)
-                    rating_diffs = top_ratings - b_uj
-                    preds[idx] = b_ui + (np.sum(top_sims * rating_diffs) / sim_sum)
-                else:
-                    preds[idx] = np.sum(top_sims * top_ratings) / sim_sum
-            else:
-                if self.prediction_mode == 'biased_baseline' and self.baseline_predictor is not None:
-                    assert self.baseline_predictor.b_u is not None and self.baseline_predictor.b_i is not None
-                    preds[idx] = float(np.clip(self.baseline_predictor.mu + self.baseline_predictor.b_u[user_idx] + self.baseline_predictor.b_i[item], 1.0, 5.0))
-                else:
-                    preds[idx] = 3.0
+            valid_mask = similarities > 0
+            if not np.any(valid_mask):
+                preds[idx] = 3.0
+                continue
+
+            valid_similarities = similarities[valid_mask]
+            valid_rated_items = rated_items[valid_mask]
+
+            top_k_idx = np.argsort(valid_similarities)[-self.k_neighbors:]
+            top_sims = valid_similarities[top_k_idx]
+            top_ratings = ratings[valid_mask][top_k_idx]
+
+            sim_sum = np.sum(top_sims)
+            # Trung bình có trọng số thuần túy (weighted average)
+            preds[idx] = np.sum(top_sims * top_ratings) / sim_sum if sim_sum > 0 else 3.0
+
         return np.clip(preds, 1.0, 5.0)
 
 

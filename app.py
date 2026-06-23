@@ -9,7 +9,7 @@ import requests
 from typing import Tuple, Optional, Any, Dict, List
 
 from src.data_loader import load_raw_data, load_movie_titles, load_matrix, add_new_user, add_movie_rating, get_max_user_id
-from src.evaluation import compute_mae, compute_rmse, compute_precision_recall_at_k, compute_prediction_time
+from src.evaluation import compute_mae, compute_rmse, compute_precision_recall_at_k, compute_prediction_time, compute_f1_at_k
 from src.recommender import UserBasedCollaborativeFiltering, ItemBasedCollaborativeFiltering, MatrixFactorizationSVD
 from src.content_based import ContentBasedRecommender
 from src.explainer import AlgorithmExplainer
@@ -305,11 +305,11 @@ def render_visualizer(algo_type, data):
     if "CF" in data.get("algo_type", algo_type):
         st.info("💡 **Gợi ý dựa trên Lọc Cộng Tác (Collaborative Filtering)**: Tìm những người dùng (hoặc phim) giống với đối tượng hiện tại nhất, sau đó tổng hợp điểm số từ họ để đưa ra dự đoán.")
         
-        tab1, tab2, tab3, tab4 = st.tabs(["1️⃣ Dữ liệu nền", "2️⃣ Tìm láng giềng", "3️⃣ Điều chỉnh sai số", "4️⃣ Dự đoán"])
+        tab1, tab2, tab3, tab4 = st.tabs(["1️⃣ Ma Trận Đánh Giá", "2️⃣ Độ Tương Đồng", "3️⃣ Đóng Góp Trọng Số", "4️⃣ Kết Quả Dự Đoán"])
         
         with tab1:
-            st.markdown("#### Bước 1: Trích xuất Ma trận đánh giá con (Sub-matrix)")
-            st.markdown("Lọc ra dữ liệu của đối tượng đang xét và các láng giềng liên quan. Màu đỏ là ô cần dự đoán.")
+            st.markdown("#### Bước 1: Ma Trận Đánh Giá (Sub-matrix)")
+            st.markdown("Trích xuất tập con của ma trận đánh giá gồm đối tượng hiện tại và các láng giềng. 🔴 Ô đỏ = điểm cần dự đoán | 🟡 Hàng vàng = đối tượng đang xét | 🔵 Cột xanh = phim cần đoán.")
             step1 = data["step1_data"]
             df = step1["df_matrix"]
             target_row = step1["target_row"]
@@ -328,20 +328,22 @@ def render_visualizer(algo_type, data):
             st.dataframe(df.style.apply(highlight_target, axis=None).format("{:.1f}", na_rep="-"))
             
         with tab2:
-            st.markdown("#### Bước 2: Độ tương đồng của các Láng giềng")
+            st.markdown("#### Bước 2: Độ Tương Đồng với Láng Giềng")
             step2 = data["step2_data"]
             neighbors_df = pd.DataFrame(step2["neighbors_data"])
             
             if not neighbors_df.empty:
                 label_col = "User ID" if "User ID" in neighbors_df.columns else "Item"
                 fig, ax = plt.subplots(figsize=(6, 3))
-                sns.barplot(data=neighbors_df, x="Similarity", y=label_col, ax=ax, palette="viridis")
+                sns.barplot(data=neighbors_df, x="Similarity", y=label_col, ax=ax,
+                            hue=label_col, palette="viridis", legend=False)
                 ax.set_title("Mức độ tương đồng (Càng dài càng giống)")
                 st.pyplot(fig)
+                plt.close(fig)
             st.dataframe(neighbors_df)
             
         with tab3:
-            st.markdown("#### Bước 3: Chi tiết các thành phần đóng góp")
+            st.markdown("#### Bước 3: Đóng Góp Trọng Số của từng Láng Giềng")
             step3 = data["step3_data"]
             details_df = pd.DataFrame(step3["details"])
             st.dataframe(details_df)
@@ -353,7 +355,7 @@ def render_visualizer(algo_type, data):
                 st.info("Chế độ **Basic**: Tính trung bình có trọng số trực tiếp từ điểm đánh giá của láng giềng.")
             
         with tab4:
-            st.markdown("#### Bước 4: Công thức tổng hợp & Dự đoán")
+            st.markdown("#### Bước 4: Kết Quả Dự Đoán Cuối Cùng")
             step4 = data["step4_data"]
             if "user_mean" in step4["formula_data"]:
                 st.write(f"**Mean của User hiện tại:** {step4['formula_data']['user_mean']:.2f}")
@@ -370,11 +372,11 @@ def render_visualizer(algo_type, data):
     else:
         st.info("💡 **Gợi ý dựa trên Phân rã Ma trận (SVD)**: Tách User và Item thành các vector Đặc trưng ẩn (Latent Factors), sau đó khớp chúng lại với nhau để tìm sự đồng điệu.")
         
-        tab1, tab2, tab3 = st.tabs(["1️⃣ Tách Bias", "2️⃣ Khớp Đặc trưng", "3️⃣ Dự đoán"])
+        tab1, tab2, tab3 = st.tabs(["1️⃣ Thành Phần Bias", "2️⃣ Vector Đặc Trưng Ẩn", "3️⃣ Kết Quả Dự Đoán"])
         
         with tab1:
-            st.markdown("#### Bước 1: Các thành phần mốc nền (Baseline Bias)")
-            st.markdown("Đây là các yếu tố tĩnh không phụ thuộc vào độ tương đồng, đại diện cho xu hướng chung.")
+            st.markdown("#### Bước 1: Thành Phần Bias (Baseline)")
+            st.markdown("Các yếu tố tĩnh phản ánh xu hướng chung, không phụ thuộc vào độ tương đồng: Global Mean, User Bias, Item Bias.")
             step1 = data["step1_data"]
             
             c1, c2, c3 = st.columns(3)
@@ -383,7 +385,7 @@ def render_visualizer(algo_type, data):
             c3.metric("Item Bias ($b_i$)", f"{step1['b_i']:.4f}", "Phim này hay/dở hơn mức TB")
             
         with tab2:
-            st.markdown("#### Bước 2: Không gian Đặc trưng ẩn (Latent Factors)")
+            st.markdown("#### Bước 2: Vector Đặc Trưng Ẩn (Latent Factors)")
             step2 = data["step2_data"]
             factors_df = pd.DataFrame(step2["factors_data"])
             
@@ -405,7 +407,7 @@ def render_visualizer(algo_type, data):
             st.dataframe(factors_df)
             
         with tab3:
-            st.markdown("#### Bước 3: Công thức Tích vô hướng & Tổng hợp")
+            st.markdown("#### Bước 3: Kết Quả Dự Đoán Cuối Cùng")
             step3 = data["step3_data"]
             st.write(f"**Tổng giá trị khớp (Tích vô hướng $P_u \\cdot Q_i$):** {step3['dot_product']:.4f}")
             st.markdown(step3["formula_latex"])
@@ -581,50 +583,166 @@ elif page == "Dành Cho Developer":
     with center_col:
         st.title("Bảng Điều Khiển & Đánh Giá Thuật Toán")
         
-        tab1, tab2, tab3 = st.tabs(["Trực Quan Hóa Dữ Liệu", "Phân tích và Đánh giá Mô hình", "So Sánh Thuật Toán"])
+        tab1, tab2, tab3 = st.tabs(["Khám Phá Dữ Liệu", "Đánh Giá Mô Hình", "Phân Tích Chi Tiết"])
         
         with tab1:
-            st.header("Khám Phá Cơ Chế Các Thuật Toán Gợi Ý")
-        
-            c_prob1, c_prob2 = st.columns(2)
-            with c_prob1:
-                total_elements = train_matrix.shape[0] * train_matrix.shape[1]
-                nonzero_elements = np.count_nonzero(train_matrix)
-                sparsity = (1 - nonzero_elements / total_elements) * 100
-                
-                fig, ax = plt.subplots(figsize=(4, 3))
-                ax.pie([nonzero_elements, total_elements - nonzero_elements], 
-                       labels=['Có đánh giá', 'Trống'], 
-                       autopct='%1.1f%%', colors=['#ff9999','#66b3ff'], startangle=90, explode=(0.1, 0))
-                ax.set_title(f"Mức Độ Thưa Thớt ({sparsity:.1f}%)", fontsize=10)
+            st.header("Khám Phá Dữ Liệu (EDA)")
+            st.markdown("Phân tích đặc điểm của tập dữ liệu MovieLens để hiểu rõ hơn về dữ liệu đầu vào của các mô hình gợi ý.")
+
+            # ── Hàng 1: Tổng quan số liệu ──────────────────────────────
+            st.subheader("📊 Tổng Quan Tập Dữ Liệu")
+            total_ratings = len(df_raw)
+            num_users = df_raw['user_id'].nunique()
+            num_movies = df_raw['item_id'].nunique()
+            avg_rating = df_raw['rating'].mean()
+            total_elements = train_matrix.shape[0] * train_matrix.shape[1]
+            nonzero_elements = np.count_nonzero(train_matrix)
+            sparsity = (1 - nonzero_elements / total_elements) * 100
+
+            m1, m2, m3, m4, m5 = st.columns(5)
+            m1.metric("Tổng số đánh giá", f"{total_ratings:,}")
+            m2.metric("Số người dùng", f"{num_users:,}")
+            m3.metric("Số bộ phim", f"{num_movies:,}")
+            m4.metric("Điểm TB toàn hệ thống", f"{avg_rating:.2f} ⭐")
+            m5.metric("Độ thưa thớt", f"{sparsity:.1f}%")
+
+            st.markdown("---")
+
+            # ── Hàng 2: Phân phối đánh giá + Phân phối hoạt động user ──
+            st.subheader("📈 Phân Phối Dữ Liệu")
+            col_r1, col_r2 = st.columns(2)
+
+            with col_r1:
+                st.markdown("**① Phân phối điểm đánh giá (1–5 ⭐)**")
+                st.markdown("Người dùng có xu hướng chấm điểm cao hay thấp?")
+                rating_counts = df_raw['rating'].value_counts().sort_index()
+                fig, ax = plt.subplots(figsize=(5, 3))
+                bars = ax.bar(rating_counts.index, rating_counts.values,
+                              color=['#d62728','#ff7f0e','#ffd700','#2ca02c','#1f77b4'],
+                              edgecolor='white', linewidth=0.8)
+                for bar, val in zip(bars, rating_counts.values):
+                    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 200,
+                            f'{val:,}', ha='center', va='bottom', fontsize=8)
+                ax.set_xlabel("Điểm đánh giá (sao)")
+                ax.set_ylabel("Số lượng")
+                ax.set_title("Phân phối điểm đánh giá")
+                ax.set_xticks([1, 2, 3, 4, 5])
                 st.pyplot(fig)
-                
-            with c_prob2:
+                plt.close(fig)
+
+            with col_r2:
+                st.markdown("**② Phân phối mức độ hoạt động của User**")
+                st.markdown("Bao nhiêu user xem ít phim, bao nhiêu xem nhiều phim?")
+                user_activity = df_raw.groupby('user_id')['rating'].count()
+                fig, ax = plt.subplots(figsize=(5, 3))
+                ax.hist(user_activity.values, bins=40, color='#5c85d6', edgecolor='white', linewidth=0.5)
+                ax.axvline(user_activity.median(), color='orange', linestyle='--', linewidth=1.5,
+                           label=f'Median: {user_activity.median():.0f}')
+                ax.set_xlabel("Số phim đã đánh giá")
+                ax.set_ylabel("Số lượng user")
+                ax.set_title("Phân phối hoạt động User")
+                ax.legend(fontsize=9)
+                st.pyplot(fig)
+                plt.close(fig)
+
+            st.markdown("---")
+
+            # ── Hàng 3: Top phim + Scatter lượng-chất ───────────────────
+            st.subheader("🎬 Phân Tích Phim")
+            col_m1, col_m2 = st.columns(2)
+
+            with col_m1:
+                st.markdown("**③ Top 15 phim được đánh giá nhiều nhất**")
+                top15 = df_raw['item_id'].value_counts().head(15)
+                top15_names = [movie_titles.get(int(mid), f"Phim {mid}")[:30] for mid in top15.index]
+                fig, ax = plt.subplots(figsize=(5, 4))
+                colors = plt.get_cmap('viridis')(np.linspace(0.3, 0.9, 15))
+                bars = ax.barh(range(15), top15.values[::-1], color=colors[::-1])
+                ax.set_yticks(range(15))
+                ax.set_yticklabels(top15_names[::-1], fontsize=8)
+                ax.set_xlabel("Số lượng đánh giá")
+                ax.set_title("Top 15 phim phổ biến nhất")
+                st.pyplot(fig)
+                plt.close(fig)
+
+            with col_m2:
+                st.markdown("**④ Lượng đánh giá vs. Điểm trung bình của phim**")
+                st.markdown("Phim ít người xem có điểm cao hơn thực chất không?")
+                movie_stats = df_raw.groupby('item_id').agg(
+                    count=('rating', 'count'),
+                    mean_rating=('rating', 'mean')
+                ).reset_index()
+                fig, ax = plt.subplots(figsize=(5, 4))
+                sc = ax.scatter(movie_stats['count'], movie_stats['mean_rating'],
+                                alpha=0.4, s=20, c=movie_stats['mean_rating'],
+                                cmap='RdYlGn', vmin=1, vmax=5)
+                plt.colorbar(sc, ax=ax, label='Điểm TB')
+                ax.set_xlabel("Số lượng đánh giá")
+                ax.set_ylabel("Điểm trung bình")
+                ax.set_title("Số lượng đánh giá vs. Điểm trung bình")
+                ax.axhline(avg_rating, color='gray', linestyle='--', linewidth=1,
+                           label=f'Global mean: {avg_rating:.2f}')
+                ax.legend(fontsize=9)
+                st.pyplot(fig)
+                plt.close(fig)
+
+            st.markdown("---")
+
+            # ── Hàng 4: Sparsity + Long-tail ────────────────────────────
+            st.subheader("🔍 Đặc Điểm Cấu Trúc Dữ Liệu")
+            col_s1, col_s2 = st.columns(2)
+
+            with col_s1:
+                st.markdown("**⑤ Độ thưa thớt (Sparsity)**")
+                st.markdown(f"Ma trận User×Item có **{sparsity:.1f}%** ô trống, chỉ **{nonzero_elements:,}** ô có giá trị.")
                 fig, ax = plt.subplots(figsize=(4, 3))
+                ax.pie([nonzero_elements, total_elements - nonzero_elements],
+                       labels=['Có đánh giá', 'Trống'],
+                       autopct='%1.1f%%', colors=['#ff9999','#66b3ff'],
+                       startangle=90, explode=(0.08, 0))
+                ax.set_title(f"Sparsity = {sparsity:.1f}%", fontsize=10)
+                st.pyplot(fig)
+                plt.close(fig)
+
+            with col_s2:
+                st.markdown("**⑥ Hiện tượng Đuôi Dài (Long-Tail)**")
+                st.markdown("Vài phim nổi tiếng chiếm phần lớn đánh giá; đa số phim rất ít được chú ý.")
                 movie_rating_counts = df_raw['item_id'].value_counts().values
-                ax.plot(movie_rating_counts, color='green', linewidth=2)
-                ax.fill_between(range(len(movie_rating_counts)), movie_rating_counts, color='green', alpha=0.3)
-                ax.set_title("Hiện tượng Đuôi Dài (Long-Tail)")
+                fig, ax = plt.subplots(figsize=(4, 3))
+                ax.plot(movie_rating_counts, color='#2ecc71', linewidth=2)
+                ax.fill_between(range(len(movie_rating_counts)), movie_rating_counts,
+                                color='#2ecc71', alpha=0.3)
+                ax.set_title("Long-Tail: Phân phối số đánh giá theo phim")
                 ax.set_ylabel("Số lượng đánh giá")
                 ax.set_xticks([])
                 st.pyplot(fig)
-                
+                plt.close(fig)
+
             st.markdown("---")
-            
-            st.subheader("Ma trận tương đồng (User Similarity Heatmap)")
-            st.markdown("Trực quan hóa độ tương đồng Pearson giữa một số User:")
-            sample_users = st.multiselect("Chọn các User ID:", list(range(1, 31)), default=[1, 2, 3, 4, 5])
+
+            # ── Hàng 5: User Similarity Heatmap ─────────────────────────
+            st.subheader("🔥 Ma Trận Tương Đồng (User Similarity Heatmap)")
+            st.markdown("Trực quan hóa độ tương đồng Pearson giữa các User. Giá trị gần 1 = rất giống nhau về sở thích.")
+            sample_users = st.multiselect("Chọn các User ID để so sánh:", list(range(1, 31)), default=[1, 2, 3, 4, 5])
             if len(sample_users) > 1:
                 indices = [u - 1 for u in sample_users]
                 sim_sub = user_cf.similarity_matrix[np.ix_(indices, indices)]
                 fig_sim, ax_sim = plt.subplots(figsize=(5, 4))
-                sns.heatmap(sim_sub, annot=True, fmt=".2f", cmap="YlGnBu", xticklabels=[str(u) for u in sample_users], yticklabels=[str(u) for u in sample_users], ax=ax_sim, annot_kws={"size": 8})
+                sns.heatmap(sim_sub, annot=True, fmt=".2f", cmap="YlGnBu",
+                            xticklabels=[str(u) for u in sample_users],
+                            yticklabels=[str(u) for u in sample_users],
+                            ax=ax_sim, annot_kws={"size": 8})
                 ax_sim.set_title("User Similarity Matrix (Pearson)", fontsize=10)
                 st.pyplot(fig_sim)
+                plt.close(fig_sim)
+            else:
+                st.info("Vui lòng chọn ít nhất 2 User để hiển thị heatmap.")
 
             st.markdown("---")
 
-            st.subheader("Matrix Factorization (SVD): Trực quan hóa Đặc trưng ẩn")
+            # ── Hàng 6: SVD Latent Space PCA ────────────────────────────
+            st.subheader("🧬 SVD: Không Gian Đặc Trưng Ẩn (Latent Space)")
+            st.markdown("Chiếu vector đặc trưng phim (Q matrix) xuống 2D bằng PCA. Các phim gần nhau = có đặc trưng ẩn tương tự.")
             @st.cache_data
             def get_pca_data(_q_matrix, _movies):
                 from sklearn.decomposition import PCA
@@ -646,16 +764,19 @@ elif page == "Dành Cho Developer":
                     
                 ax.set_title("Không Gian Đặc Trưng Ẩn 2D Của Top 100 Phim Phổ Biến", fontsize=10)
                 st.pyplot(fig)
+                plt.close(fig)
+
                 
         with tab2:
-            st.header("So Sánh Độ Lệch Sai Số (MAE/RMSE)")
+            st.header("Đánh Giá Hiệu Năng Mô Hình")
             st.markdown("""
             **Các tiêu chí đánh giá:**
             - **MAE (Mean Absolute Error):** Trung bình giá trị tuyệt đối của sai số. Càng nhỏ càng tốt.
             - **RMSE (Root Mean Square Error):** Căn bậc hai của trung bình bình phương sai số. Xử phạt các sai số lớn. Càng nhỏ càng tốt.
             - **Precision@K:** Tỷ lệ phim đúng sở thích trong top K gợi ý. Càng lớn càng tốt.
             - **Recall@K:** Tỷ lệ bao phủ các phim yêu thích trong top K gợi ý. Càng lớn càng tốt.
-            - **Tốc độ:** Thời gian trung bình để tính toán dự đoán cho 1 user (giây). Càng nhỏ càng tốt.
+            - **F1@K:** Trung bình điều hòa của Precision và Recall, cân bằng cả hai độ đo. Càng lớn càng tốt.
+            - **Execution Time (s/user):** Thời gian trung bình để tính toán dự đoán cho 1 user (giây). Càng nhỏ càng tốt.
             """)
             
             if svd_model and len(svd_model.history.get('epoch', [])) > 0:
@@ -673,45 +794,74 @@ elif page == "Dành Cho Developer":
                     
             st.markdown("---")
             if st.button("Chạy So Sánh Thuật Toán"):
-                with st.spinner("Đang tính toán đánh giá..."):
-                    # Sử dụng Global Baseline làm mốc so sánh
+                with st.spinner("Đang tính toán đánh giá... (có thể mất 1-2 phút)"):
                     baseline_model = item_cf.baseline_predictor
+
+                    # ── Tạo các instance tạm, dùng lại similarity matrix đã train ──
+                    # 1. User-Based Căn bản (dùng Pearson)
+                    u_basic = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode='basic')
+                    u_basic.train_matrix = user_cf.train_matrix
+                    u_basic.similarity_matrix = user_cf.pearson_similarity_matrix
+                    u_basic.user_means = user_cf.user_means
+
+                    # 2. User-Based Means (dùng Pearson)
+                    u_means = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode='means')
+                    u_means.train_matrix = user_cf.train_matrix
+                    u_means.similarity_matrix = user_cf.pearson_similarity_matrix
+                    u_means.user_means = user_cf.user_means
+
+                    # 3. Item-Based Căn bản (dùng Cosine)
+                    i_basic = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors)
+                    i_basic.train_matrix = item_cf.train_matrix
+                    i_basic.similarity_matrix = item_cf.cosine_similarity_matrix
                     
-                    prec_user, rec_user = compute_precision_recall_at_k(train_matrix, test_matrix, user_cf)
-                    prec_item, rec_item = compute_precision_recall_at_k(train_matrix, test_matrix, item_cf)
-                    prec_svd, rec_svd = compute_precision_recall_at_k(train_matrix, test_matrix, svd_model)
-                    
-                    time_user = compute_prediction_time(test_matrix, user_cf)
-                    time_item = compute_prediction_time(test_matrix, item_cf)
-                    time_svd = compute_prediction_time(test_matrix, svd_model)
-                    
-                    eval_data = {
-                        'Thuật toán': ['Global Baseline', 'User-Based (Biased)', 
-                                       'Item-Based (Biased)', 'SVD (Matrix Factorization)'],
-                        'MAE': [
-                            compute_mae(test_matrix, baseline_model) if baseline_model else 0.0,
-                            compute_mae(test_matrix, user_cf),
-                            compute_mae(test_matrix, item_cf),
-                            compute_mae(test_matrix, svd_model)
-                        ],
-                        'RMSE': [
-                            compute_rmse(test_matrix, baseline_model) if baseline_model else 0.0,
-                            compute_rmse(test_matrix, user_cf),
-                            compute_rmse(test_matrix, item_cf),
-                            compute_rmse(test_matrix, svd_model)
-                        ],
-                        'Precision@10': [0.0, prec_user, prec_item, prec_svd],
-                        'Recall@10': [0.0, rec_user, rec_item, rec_svd],
-                        'Tốc độ (s/user)': [0.0, time_user, time_item, time_svd]
+                    # 4. Item-Based Trọng số (dùng Adjusted Cosine)
+                    i_adj_cos = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors)
+                    i_adj_cos.train_matrix = item_cf.train_matrix
+                    i_adj_cos.similarity_matrix = item_cf.adjusted_cosine_similarity_matrix
+
+                    models = {
+                        'User-CF Căn bản (Pearson)': u_basic,
+                        'User-CF Means (Pearson)': u_means,
+                        'Item-CF Căn bản (Cosine)': i_basic,
+                        'Item-CF Trọng số (Adj Cosine)': i_adj_cos,
+                        'Funk SVD': svd_model,
                     }
-                    eval_df = pd.DataFrame(eval_data)
-                    eval_df.set_index('Thuật toán', inplace=True)
+
+                    rows = []
+                    progress = st.progress(0, text="Đang đánh giá...")
+                    total = len(models)
+                    for i, (name, model) in enumerate(models.items()):
+                        progress.progress((i) / total, text=f"Đang tính: {name}")
+                        if model is None:
+                            rows.append({'Thuật toán': name, 'MAE': 0.0, 'RMSE': 0.0,
+                                         'Precision@10': 0.0, 'Recall@10': 0.0,
+                                         'F1@10': 0.0, 'Execution Time (s/user)': 0.0})
+                            continue
+                        mae  = compute_mae(test_matrix, model)
+                        rmse = compute_rmse(test_matrix, model)
+                        p, r = compute_precision_recall_at_k(train_matrix, test_matrix, model)
+                        f1   = compute_f1_at_k(p, r)
+                        spd  = compute_prediction_time(test_matrix, model)
+                        rows.append({'Thuật toán': name, 'MAE': mae, 'RMSE': rmse,
+                                     'Precision@10': p, 'Recall@10': r,
+                                     'F1@10': f1, 'Execution Time (s/user)': spd})
+                    progress.progress(1.0, text="Hoàn tất!")
+
+                    eval_df = pd.DataFrame(rows).set_index('Thuật toán')
                     st.markdown("**Bảng So Sánh Hiệu Năng trên Test Set**")
-                    st.dataframe(eval_df.style.highlight_min(subset=['MAE', 'RMSE', 'Tốc độ (s/user)'], color='lightgreen').highlight_max(subset=['Precision@10', 'Recall@10'], color='lightgreen').format("{:.4f}"))
+                    ranking_metrics = ['Precision@10', 'Recall@10', 'F1@10']
+                    error_metrics   = ['MAE', 'RMSE', 'Execution Time (s/user)']
+                    st.dataframe(
+                        eval_df.style
+                        .highlight_min(subset=error_metrics, color='lightgreen')
+                        .highlight_max(subset=ranking_metrics, color='lightgreen')
+                        .format("{:.4f}")
+                    )
 
         with tab3:
-            st.header("So Sánh Gợi Ý Trực Tiếp")
-            st.markdown("So sánh song song các thuật toán gợi ý.")
+            st.header("Phân Tích Chi Tiết Thuật Toán")
+            st.markdown("So sánh song song kết quả gợi ý và phân tích từng bước tính điểm của các thuật toán.")
             
             c_input1, c_input2 = st.columns(2)
             with c_input1:
@@ -777,7 +927,7 @@ elif page == "Dành Cho Developer":
                                 render_movie_grid(user_recs_means, tmdb_key, cols_count=5)
 
                                 # --- Item-Based CF (Basic) ---
-                                temp_item_cf_basic = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors, prediction_mode='basic')
+                                temp_item_cf_basic = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors)
                                 temp_item_cf_basic.train_matrix = item_cf.train_matrix
                                 temp_item_cf_basic.similarity_matrix = item_cf.similarity_matrix
                                 preds_item_basic = temp_item_cf_basic.predict_batch(user_idx, unviewed_items)
@@ -797,39 +947,31 @@ elif page == "Dành Cho Developer":
                                 c1, c2, c3 = st.columns(3)
                                 
                                 with c1:
-                                    st.markdown("### User-Based CF")
-                                    user_cf_mode = st.selectbox("Phương pháp:", ["basic", "means", "biased_baseline"], key="user_cf_mode")
-                                    
-                                    # Tạo instance tạm để chạy mode khác
-                                    temp_user_cf = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode=user_cf_mode)
+                                    st.markdown("### User-Based CF (Means - Pearson)")
+                                    temp_user_cf = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode='means')
                                     temp_user_cf.train_matrix = user_cf.train_matrix
-                                    temp_user_cf.similarity_matrix = user_cf.similarity_matrix
+                                    temp_user_cf.similarity_matrix = user_cf.pearson_similarity_matrix
                                     temp_user_cf.user_means = user_cf.user_means
-                                    if user_cf_mode == 'biased_baseline':
-                                        temp_user_cf.baseline_predictor = user_cf.baseline_predictor
-                                        
+                                    temp_user_cf.baseline_predictor = None
+
                                     t_preds_user = temp_user_cf.predict_batch(user_idx, unviewed_items)
                                     t_top_user_idx = unviewed_items[np.argsort(t_preds_user)[-top_k:][::-1]]
-                                    
+
                                     for rank, idx in enumerate(t_top_user_idx, 1):
                                         name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
                                         with st.expander(f"**{rank}.** {name} (ID: {int(idx)+1}) - Xem chi tiết"):
                                             viz_data = AlgorithmExplainer.get_user_based_viz_data(temp_user_cf, user_idx, idx, movie_titles)
                                             render_visualizer("User-Based CF", viz_data)
-                                        
+
                                 with c2:
-                                    st.markdown("### Item-Based CF")
-                                    item_cf_mode = st.selectbox("Phương pháp:", ["basic", "biased_baseline"], key="item_cf_mode")
-                                    
-                                    temp_item_cf = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors, prediction_mode=item_cf_mode)
+                                    st.markdown("### Item-Based CF (Weighted Avg - Adj Cosine)")
+                                    temp_item_cf = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors)
                                     temp_item_cf.train_matrix = item_cf.train_matrix
-                                    temp_item_cf.similarity_matrix = item_cf.similarity_matrix
-                                    if item_cf_mode == 'biased_baseline':
-                                        temp_item_cf.baseline_predictor = item_cf.baseline_predictor
-                                        
+                                    temp_item_cf.similarity_matrix = item_cf.adjusted_cosine_similarity_matrix
+
                                     t_preds_item = temp_item_cf.predict_batch(user_idx, unviewed_items)
                                     t_top_item_idx = unviewed_items[np.argsort(t_preds_item)[-top_k:][::-1]]
-                                    
+
                                     for rank, idx in enumerate(t_top_item_idx, 1):
                                         name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
                                         with st.expander(f"**{rank}.** {name} (ID: {int(idx)+1}) - Xem chi tiết"):
@@ -837,7 +979,7 @@ elif page == "Dành Cho Developer":
                                             render_visualizer("Item-Based CF", viz_data)
                                         
                                 with c3:
-                                    st.markdown("### SVD")
+                                    st.markdown("### Funk SVD")
                                     st.markdown("*Matrix Factorization*")
                                     for rank, idx in enumerate(top_svd_idx, 1):
                                         name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")

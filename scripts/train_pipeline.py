@@ -7,7 +7,7 @@ base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(base_dir)
 
 from src.data_loader import get_or_create_processed_matrices
-from src.similarity import compute_pearson_similarity, compute_adjusted_cosine_similarity
+from src.similarity import compute_pearson_similarity, compute_cosine_similarity, compute_adjusted_cosine_similarity
 from src.recommender import UserBasedCollaborativeFiltering, ItemBasedCollaborativeFiltering, MatrixFactorizationSVD
 from src.content_based import ContentBasedRecommender, load_item_metadata
 
@@ -23,19 +23,23 @@ def main():
     train_matrix, test_matrix = get_or_create_processed_matrices(data_path, processed_dir)
     
     print("2. Computing Similarity Matrices...")
+    print(" - Computing User-User Cosine Similarity...")
+    user_cosine_sim = compute_cosine_similarity(train_matrix)
     print(" - Computing User-User Pearson Similarity...")
-    user_sim = compute_pearson_similarity(train_matrix)
+    user_pearson_sim = compute_pearson_similarity(train_matrix)
+    print(" - Computing Item-Item Cosine Similarity...")
+    item_cosine_sim = compute_cosine_similarity(train_matrix.T)  # dùng cột (items) làm vector
     print(" - Computing Item-Item Adjusted Cosine Similarity...")
-    item_sim = compute_adjusted_cosine_similarity(train_matrix)
+    item_adj_cosine_sim = compute_adjusted_cosine_similarity(train_matrix)
     
     print("3. Initializing and Saving Memory-Based Models...")
-    user_cf = UserBasedCollaborativeFiltering(k_neighbors=40, prediction_mode='biased_baseline')
-    user_cf.fit(train_matrix, user_sim)
+    user_cf = UserBasedCollaborativeFiltering(k_neighbors=40)
+    user_cf.fit_both(train_matrix, user_cosine_sim, user_pearson_sim)
     with open(os.path.join(models_dir, 'user_cf.pkl'), 'wb') as f:
         pickle.dump(user_cf, f)
         
     item_cf = ItemBasedCollaborativeFiltering(k_neighbors=40)
-    item_cf.fit(train_matrix, item_sim)
+    item_cf.fit_both(train_matrix, item_cosine_sim, item_adj_cosine_sim)
     with open(os.path.join(models_dir, 'item_cf.pkl'), 'wb') as f:
         pickle.dump(item_cf, f)
         

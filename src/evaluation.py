@@ -92,6 +92,47 @@ def compute_precision_recall_at_k(train_matrix: np.ndarray, test_matrix: np.ndar
         
     return float(np.mean(precisions)), float(np.mean(recalls))
 
+def compute_f1_at_k(precision: float, recall: float) -> float:
+    """
+    Tính F1-Score@K từ Precision@K và Recall@K đã tính sẵn.
+    F1 là trung bình điều hòa của Precision và Recall.
+    Nhận kết quả từ compute_precision_recall_at_k để tránh tính lại predict_batch.
+    """
+    if precision + recall == 0:
+        return 0.0
+    return float(2 * precision * recall / (precision + recall))
+
+def compute_ndcg_at_k(train_matrix: np.ndarray, test_matrix: np.ndarray, model: Any, k: int = 10) -> float:
+    """Tính toán NDCG@K."""
+    unique_users = np.unique(np.argwhere(test_matrix > 0)[:, 0])
+    np.random.seed(42)
+    sample_users = np.random.choice(unique_users, min(len(unique_users), 100), replace=False)
+    ndcg_scores = []
+    
+    for user in sample_users:
+        test_items = np.where(test_matrix[user] > 0)[0]
+        unviewed_items = np.where(train_matrix[user] == 0)[0]
+        if len(test_items) == 0 or len(unviewed_items) == 0:
+            continue
+            
+        preds = model.predict_batch(user, unviewed_items)
+        top_k_indices = unviewed_items[np.argsort(preds)[-k:][::-1]]
+        
+        dcg = 0.0
+        idcg = 0.0
+        for i, idx in enumerate(top_k_indices):
+            if idx in test_items:
+                dcg += (2**test_matrix[user, idx] - 1) / np.log2(i + 2)
+        
+        sorted_test = np.sort(test_matrix[user, test_items])[::-1]
+        for i in range(min(k, len(sorted_test))):
+            idcg += (2**sorted_test[i] - 1) / np.log2(i + 2)
+            
+        if idcg > 0:
+            ndcg_scores.append(dcg / idcg)
+            
+    return float(np.mean(ndcg_scores)) if ndcg_scores else 0.0
+
 def compute_prediction_time(test_matrix: np.ndarray, model: Any) -> float:
     """
     Đo thời gian dự đoán (giây) trên tập test_matrix (chia trung bình cho mỗi user).
@@ -113,4 +154,4 @@ def compute_prediction_time(test_matrix: np.ndarray, model: Any) -> float:
             
     end_time = time.time()
     total_time = end_time - start_time
-    return total_time / len(sample_users) if len(sample_users) > 0 else 0.0
+    return total_time / len(sample_users) if len(sample_users) > 0 else 0.0
