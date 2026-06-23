@@ -33,7 +33,7 @@ def main():
     item_adj_cosine_sim = compute_adjusted_cosine_similarity(train_matrix)
     
     print("3. Initializing and Saving Memory-Based Models...")
-    user_cf = UserBasedCollaborativeFiltering(k_neighbors=40)
+    user_cf = UserBasedCollaborativeFiltering(k_neighbors=40, prediction_mode='means')
     user_cf.fit_both(train_matrix, user_cosine_sim, user_pearson_sim)
     with open(os.path.join(models_dir, 'user_cf.pkl'), 'wb') as f:
         pickle.dump(user_cf, f)

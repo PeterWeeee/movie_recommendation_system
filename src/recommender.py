@@ -260,7 +260,7 @@ class ItemBasedCollaborativeFiltering:
         similarities = similarities[valid_mask]
         rated_items = rated_items[valid_mask]
 
-        top_k_idx = np.argsort(similarities)[-self.k_neighbors:]
+        top_k_idx = np.argsort(similarities)[::-1][:self.k_neighbors]
         top_sims = similarities[top_k_idx]
         top_rated_items = rated_items[top_k_idx]
 
@@ -293,7 +293,7 @@ class ItemBasedCollaborativeFiltering:
             valid_similarities = similarities[valid_mask]
             valid_rated_items = rated_items[valid_mask]
 
-            top_k_idx = np.argsort(valid_similarities)[-self.k_neighbors:]
+            top_k_idx = np.argsort(valid_similarities)[::-1][:self.k_neighbors]
             top_sims = valid_similarities[top_k_idx]
             top_ratings = ratings[valid_mask][top_k_idx]
 
@@ -361,7 +361,7 @@ class MatrixFactorizationSVD:
                 
                 # Cập nhật P và Q với L2 Regularization
                 p_u = self.P[u].copy() # sao chép để dùng q_i cũ cập nhật p_u
-                q_i = self.Q[i]
+                q_i = self.Q[i].copy() # sao chép để đảm bảo dùng giá trị cũ
                 
                 self.P[u] += self.lr * (err * q_i - self.reg * p_u)
                 self.Q[i] += self.lr * (err * p_u - self.reg * q_i)
