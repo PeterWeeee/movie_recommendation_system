@@ -65,28 +65,26 @@ def compute_precision_recall_at_k(train_matrix: np.ndarray, test_matrix: np.ndar
     recalls = []
     
     for user in sample_users:
-        # Tìm các phim người dùng đã xem trong test set và có điểm số cao (>= threshold)
-        test_items = np.where(test_matrix[user] >= threshold)[0]
-        if len(test_items) == 0:
+        # Tất cả các phim trong test set của user
+        test_items_all = np.where(test_matrix[user] > 0)[0]
+        # Các phim thực sự được user đánh giá cao (>= threshold)
+        test_items_positive = np.where(test_matrix[user] >= threshold)[0]
+        
+        if len(test_items_positive) == 0:
             continue
             
-        # Tìm các phim chưa xem trong train set
-        unviewed_items = np.where(train_matrix[user] == 0)[0]
-        if len(unviewed_items) == 0:
-            continue
-            
-        # Dự đoán điểm cho các phim chưa xem
-        preds = model.predict_batch(user, unviewed_items)
+        # Dự đoán điểm cho tất cả các phim trong test set
+        preds = model.predict_batch(user, test_items_all)
         
-        # Lấy top K phim có điểm dự đoán cao nhất
-        top_k_indices = unviewed_items[np.argsort(preds)[-k:][::-1]]
+        # Lấy top K phim có điểm dự đoán cao nhất (chỉ xếp hạng các phim trong test set)
+        top_k_indices = test_items_all[np.argsort(preds)[-k:][::-1]]
         
-        # Tính số lượng phim gợi ý thực sự có trong test set và đạt yêu cầu
-        hits = len(set(top_k_indices) & set(test_items))
+        # Số phim dự đoán nằm trong top K thực sự là phim tốt
+        hits = len(set(top_k_indices) & set(test_items_positive))
         
-        actual_k = min(k, len(unviewed_items))
+        actual_k = min(k, len(test_items_all))
         precisions.append(hits / actual_k)
-        recalls.append(hits / len(test_items))
+        recalls.append(hits / len(test_items_positive))
         
     if not precisions:
         return 0.0, 0.0
@@ -112,18 +110,16 @@ def compute_ndcg_at_k(train_matrix: np.ndarray, test_matrix: np.ndarray, model: 
     
     for user in sample_users:
         test_items = np.where(test_matrix[user] > 0)[0]
-        unviewed_items = np.where(train_matrix[user] == 0)[0]
-        if len(test_items) == 0 or len(unviewed_items) == 0:
+        if len(test_items) == 0:
             continue
             
-        preds = model.predict_batch(user, unviewed_items)
-        top_k_indices = unviewed_items[np.argsort(preds)[-k:][::-1]]
+        preds = model.predict_batch(user, test_items)
+        top_k_indices = test_items[np.argsort(preds)[-k:][::-1]]
         
         dcg = 0.0
         idcg = 0.0
         for i, idx in enumerate(top_k_indices):
-            if idx in test_items:
-                dcg += (2**test_matrix[user, idx] - 1) / np.log2(i + 2)
+            dcg += (2**test_matrix[user, idx] - 1) / np.log2(i + 2)
         
         sorted_test = np.sort(test_matrix[user, test_items])[::-1]
         for i in range(min(k, len(sorted_test))):
