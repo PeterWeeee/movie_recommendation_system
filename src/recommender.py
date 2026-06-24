@@ -141,8 +141,9 @@ class UserBasedCollaborativeFiltering:
         ratings = self.train_matrix[top_other_users, item_idx]
 
         if self.prediction_mode == 'biased_baseline' and self.baseline_predictor is not None:
-            b_ui = self.baseline_predictor.predict_rating(user_idx, item_idx)
-            b_vi = np.array([self.baseline_predictor.predict_rating(v, item_idx) for v in top_other_users])
+            assert self.baseline_predictor.b_u is not None and self.baseline_predictor.b_i is not None
+            b_ui = float(self.baseline_predictor.mu + self.baseline_predictor.b_u[user_idx] + self.baseline_predictor.b_i[item_idx])
+            b_vi = self.baseline_predictor.mu + self.baseline_predictor.b_u[top_other_users] + self.baseline_predictor.b_i[item_idx]
             predicted_rating = b_ui + (np.sum(top_similarities * (ratings - b_vi)) / sim_sum)
         elif self.prediction_mode == 'means':
             means = self.user_means[top_other_users]
@@ -187,8 +188,8 @@ class UserBasedCollaborativeFiltering:
 
             if self.prediction_mode == 'biased_baseline' and self.baseline_predictor is not None:
                 assert self.baseline_predictor.b_u is not None and self.baseline_predictor.b_i is not None
-                b_ui = float(np.clip(self.baseline_predictor.mu + self.baseline_predictor.b_u[user_idx] + self.baseline_predictor.b_i[item], 1.0, 5.0))
-                b_vi = np.clip(self.baseline_predictor.mu + self.baseline_predictor.b_u[top_users] + self.baseline_predictor.b_i[item], 1.0, 5.0)
+                b_ui = float(self.baseline_predictor.mu + self.baseline_predictor.b_u[user_idx] + self.baseline_predictor.b_i[item])
+                b_vi = self.baseline_predictor.mu + self.baseline_predictor.b_u[top_users] + self.baseline_predictor.b_i[item]
                 preds[idx] = b_ui + (np.sum(top_sims * (item_ratings - b_vi)) / sim_sum)
             elif self.prediction_mode == 'means':
                 means = self.user_means[top_users]
@@ -291,7 +292,6 @@ class ItemBasedCollaborativeFiltering:
                 continue
 
             valid_similarities = similarities[valid_mask]
-            valid_rated_items = rated_items[valid_mask]
 
             top_k_idx = np.argsort(valid_similarities)[::-1][:self.k_neighbors]
             top_sims = valid_similarities[top_k_idx]

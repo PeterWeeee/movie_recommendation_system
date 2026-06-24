@@ -37,8 +37,11 @@ class AlgorithmExplainer:
             for u, sim, r in zip(top_other_users, top_similarities, ratings):
                 table_md += f"| User {u+1} | {sim:.3f} | {r:.1f} | |\n"
             
-            pred = np.sum(top_similarities * ratings) / sim_sum
-            formula = f"$$ \\text{{Pred}} = \\frac{{\\sum (\\text{{Sim}} \\times R)}}{{\\sum |\\text{{Sim}}|}} = {pred:.2f} $$"
+            raw_pred = np.sum(top_similarities * ratings) / sim_sum
+            pred = np.clip(raw_pred, 1.0, 5.0)
+            formula = f"$$ \\text{{Pred}} = \\frac{{\\sum (\\text{{Sim}} \\times R)}}{{\\sum |\\text{{Sim}}|}} = {raw_pred:.2f} $$"
+            if abs(raw_pred - pred) > 0.01:
+                formula += f"\n\n**Điểm sau khi giới hạn (Clip 1-5):** {pred:.2f}"
             
         elif mode == 'means':
             table_md += "Mean Láng Giềng | Độ lệch ($R - Mean$) |\n|---|---|---|---|---|\n"
@@ -47,12 +50,15 @@ class AlgorithmExplainer:
             for u, sim, r, m, diff in zip(top_other_users, top_similarities, ratings, means, rating_diffs):
                 table_md += f"| User {u+1} | {sim:.3f} | {r:.1f} | {m:.2f} | {diff:+.2f} |\n"
                 
-            pred = user_means[user_idx] + (np.sum(top_similarities * rating_diffs) / sim_sum)
+            raw_pred = user_means[user_idx] + (np.sum(top_similarities * rating_diffs) / sim_sum)
+            pred = np.clip(raw_pred, 1.0, 5.0)
             formula = f"""
 Mean của User hiện tại: **{user_means[user_idx]:.2f}**
 
-$$ \\text{{Pred}} = \\text{{Mean}}_{{user}} + \\frac{{\\sum \\text{{Sim}} \\times (R - \\text{{Mean}}_{{neighbor}})}}{{\\sum |\\text{{Sim}}|}} = {pred:.2f} $$
+$$ \\text{{Pred}} = \\text{{Mean}}_{{user}} + \\frac{{\\sum \\text{{Sim}} \\times (R - \\text{{Mean}}_{{neighbor}})}}{{\\sum |\\text{{Sim}}|}} = {raw_pred:.2f} $$
 """
+            if abs(raw_pred - pred) > 0.01:
+                formula += f"**Điểm sau khi giới hạn (Clip 1-5):** {pred:.2f}\n"
         elif mode == 'biased_baseline':
             table_md += "Bias Láng Giềng ($b_{{vi}}$) | Độ lệch ($R - b_{{vi}}$) |\n|---|---|---|---|---|\n"
             b_ui = baseline_predictor.predict_rating(user_idx, item_idx)
@@ -61,12 +67,15 @@ $$ \\text{{Pred}} = \\text{{Mean}}_{{user}} + \\frac{{\\sum \\text{{Sim}} \\time
             for u, sim, r, b, diff in zip(top_other_users, top_similarities, ratings, b_vi, rating_diffs):
                 table_md += f"| User {u+1} | {sim:.3f} | {r:.1f} | {b:.2f} | {diff:+.2f} |\n"
                 
-            pred = b_ui + (np.sum(top_similarities * rating_diffs) / sim_sum)
+            raw_pred = b_ui + (np.sum(top_similarities * rating_diffs) / sim_sum)
+            pred = np.clip(raw_pred, 1.0, 5.0)
             formula = f"""
 Bias dự đoán cơ sở của User hiện tại ($b_{{ui}}$): **{b_ui:.2f}**
 
-$$ \\text{{Pred}} = b_{{ui}} + \\frac{{\\sum \\text{{Sim}} \\times (R - b_{{vi}})}}{{\\sum |\\text{{Sim}}|}} = {pred:.2f} $$
+$$ \\text{{Pred}} = b_{{ui}} + \\frac{{\\sum \\text{{Sim}} \\times (R - b_{{vi}})}}{{\\sum |\\text{{Sim}}|}} = {raw_pred:.2f} $$
 """
+            if abs(raw_pred - pred) > 0.01:
+                formula += f"**Điểm sau khi giới hạn (Clip 1-5):** {pred:.2f}\n"
             
         return f"""
 **Phân tích: User-Based CF (Chế độ {mode.capitalize()})**
@@ -109,11 +118,14 @@ Bảng phân tích chi tiết {len(top_other_users)} láng giềng gần nhất 
         if mode == 'basic':
             table_md += "|\n|---|---|---|---|\n"
             for i, sim, r in zip(top_rated_items, top_sims, ratings):
-                name = movie_titles.get(int(i)+1, f"Phim {i+1}")
+                name = f"[{int(i)+1}] " + movie_titles.get(int(i)+1, f"Phim {i+1}")
                 table_md += f"| {name} | {sim:.3f} | {r:.1f} | |\n"
                 
-            pred = np.sum(top_sims * ratings) / sim_sum
-            formula = f"$$ \\text{{Pred}} = \\frac{{\\sum (\\text{{Sim}} \\times R)}}{{\\sum |\\text{{Sim}}|}} = {pred:.2f} $$"
+            raw_pred = np.sum(top_sims * ratings) / sim_sum
+            pred = np.clip(raw_pred, 1.0, 5.0)
+            formula = f"$$ \\text{{Pred}} = \\frac{{\\sum (\\text{{Sim}} \\times R)}}{{\\sum |\\text{{Sim}}|}} = {raw_pred:.2f} $$"
+            if abs(raw_pred - pred) > 0.01:
+                formula += f"\n\n**Điểm sau khi giới hạn (Clip 1-5):** {pred:.2f}"
             
         elif mode == 'biased_baseline':
             table_md += "Bias Phim láng giềng ($b_{{uj}}$) | Độ lệch ($R - b_{{uj}}$) |\n|---|---|---|---|---|\n"
@@ -121,15 +133,18 @@ Bảng phân tích chi tiết {len(top_other_users)} láng giềng gần nhất 
             b_uj = np.array([baseline_predictor.predict_rating(user_idx, j) for j in top_rated_items])
             rating_diffs = ratings - b_uj
             for i, sim, r, b, diff in zip(top_rated_items, top_sims, ratings, b_uj, rating_diffs):
-                name = movie_titles.get(int(i)+1, f"Phim {i+1}")
+                name = f"[{int(i)+1}] " + movie_titles.get(int(i)+1, f"Phim {i+1}")
                 table_md += f"| {name} | {sim:.3f} | {r:.1f} | {b:.2f} | {diff:+.2f} |\n"
                 
-            pred = b_ui + (np.sum(top_sims * rating_diffs) / sim_sum)
+            raw_pred = b_ui + (np.sum(top_sims * rating_diffs) / sim_sum)
+            pred = np.clip(raw_pred, 1.0, 5.0)
             formula = f"""
 Bias dự đoán cơ sở của phim đang xét ($b_{{ui}}$): **{b_ui:.2f}**
 
-$$ \\text{{Pred}} = b_{{ui}} + \\frac{{\\sum \\text{{Sim}} \\times (R - b_{{uj}})}}{{\\sum |\\text{{Sim}}|}} = {pred:.2f} $$
+$$ \\text{{Pred}} = b_{{ui}} + \\frac{{\\sum \\text{{Sim}} \\times (R - b_{{uj}})}}{{\\sum |\\text{{Sim}}|}} = {raw_pred:.2f} $$
 """
+            if abs(raw_pred - pred) > 0.01:
+                formula += f"**Điểm sau khi giới hạn (Clip 1-5):** {pred:.2f}\n"
         return f"""
 **Phân tích: Item-Based CF (Chế độ {mode.capitalize()})**
 
@@ -163,9 +178,10 @@ Bảng phân tích {len(top_rated_items)} phim láng giềng tương đồng nh�
         for i in range(factors):
             table_md += f"| Factor {i+1} | {p_u[i]:.4f} | {q_i[i]:.4f} | {p_u[i]*q_i[i]:.4f} |\n"
             
-        final_pred = np.clip(mu + b_u + b_i + dot_product, 1.0, 5.0)
+        raw_pred = mu + b_u + b_i + dot_product
+        final_pred = np.clip(raw_pred, 1.0, 5.0)
         
-        return f"""
+        formula = f"""
 **Phân tích: SVD (Matrix Factorization)**
 
 Bảng phân tích các hệ số Bias:
@@ -177,8 +193,12 @@ Tích vô hướng đầy đủ ($P_u \\cdot Q_i$): **{dot_product:.4f}**
 **Công thức tổng quát:**
 $$ \\text{{Pred}} = \\mu + b_u + b_i + (P_u \\cdot Q_i) $$
 
-$$ \\text{{Pred}} = {mu:.2f} + {b_u:.2f} + {b_i:.2f} + {dot_product:.2f} = {final_pred:.2f} $$
+$$ \\text{{Pred}} = {mu:.2f} + {b_u:.2f} + {b_i:.2f} + {dot_product:.2f} = {raw_pred:.2f} $$
 """
+        if abs(raw_pred - final_pred) > 0.01:
+            formula += f"\n**Điểm sau khi giới hạn (Clip 1-5):** {final_pred:.2f}\n"
+            
+        return formula
 
     @staticmethod
     def _get_sub_matrix_df(train_matrix, target_user, neighbors, target_item, movie_titles, is_item_based=False):
@@ -204,7 +224,7 @@ $$ \\text{{Pred}} = {mu:.2f} + {b_u:.2f} + {b_i:.2f} + {dot_product:.2f} = {fina
                 data.append(row)
                 
             index_labels = [f"User {target_user+1}"] + [f"User {u+1}" for u in neighbors]
-            col_labels = [f"Item {target_item+1}"] + [f"Item {i+1}" for i in top_items]
+            col_labels = [f"[{target_item+1}] " + movie_titles.get(target_item+1, f"Phim {target_item+1}")] + [f"[{i+1}] " + movie_titles.get(i+1, f"Phim {i+1}") for i in top_items]
             
             df = pd.DataFrame(data, index=index_labels, columns=col_labels)
             return df, index_labels, col_labels
@@ -228,7 +248,7 @@ $$ \\text{{Pred}} = {mu:.2f} + {b_u:.2f} + {b_i:.2f} + {dot_product:.2f} = {fina
                     row.append(r if r > 0 else np.nan)
                 data.append(row)
                 
-            index_labels = [f"Item {target_item+1}"] + [f"Item {i+1}" for i in neighbors]
+            index_labels = [f"[{target_item+1}] " + movie_titles.get(target_item+1, f"Phim {target_item+1}")] + [f"[{i+1}] " + movie_titles.get(i+1, f"Phim {i+1}") for i in neighbors]
             col_labels = [f"User {target_user+1}"] + [f"User {u+1}" for u in top_users]
             
             df = pd.DataFrame(data, index=index_labels, columns=col_labels)
@@ -360,7 +380,7 @@ $$ \\text{{Pred}} = {mu:.2f} + {b_u:.2f} + {b_i:.2f} + {dot_product:.2f} = {fina
         
         neighbors_data = []
         for i, sim in zip(top_rated_items, top_sims):
-            name = movie_titles.get(int(i)+1, f"Phim {i+1}")
+            name = f"[{int(i)+1}] " + movie_titles.get(int(i)+1, f"Phim {i+1}")
             neighbors_data.append({"Item": name, "Similarity": sim})
             
         step2_data = {
@@ -375,7 +395,7 @@ $$ \\text{{Pred}} = {mu:.2f} + {b_u:.2f} + {b_i:.2f} + {dot_product:.2f} = {fina
             raw_pred = np.sum(top_sims * ratings) / sim_sum
             pred = float(np.clip(raw_pred, 1.0, 5.0))
             for i, sim, r in zip(top_rated_items, top_sims, ratings):
-                name = movie_titles.get(int(i)+1, f"Phim {i+1}")
+                name = f"[{int(i)+1}] " + movie_titles.get(int(i)+1, f"Phim {i+1}")
                 step3_data["details"].append({"Item": name, "Similarity": sim, "Rating": r})
             formula_latex = f"$$ \\text{{Pred}} = \\frac{{\\sum (\\text{{Sim}} \\times R)}}{{\\sum |\\text{{Sim}}|}} = {raw_pred:.2f} $$"
             if abs(raw_pred - pred) > 0.01:
@@ -386,7 +406,7 @@ $$ \\text{{Pred}} = {mu:.2f} + {b_u:.2f} + {b_i:.2f} + {dot_product:.2f} = {fina
             b_uj = np.array([baseline_predictor.predict_rating(user_idx, j) for j in top_rated_items])
             rating_diffs = ratings - b_uj
             for i, sim, r, b, diff in zip(top_rated_items, top_sims, ratings, b_uj, rating_diffs):
-                name = movie_titles.get(int(i)+1, f"Phim {i+1}")
+                name = f"[{int(i)+1}] " + movie_titles.get(int(i)+1, f"Phim {i+1}")
                 step3_data["details"].append({"Item": name, "Similarity": sim, "Rating": r, "Bias": b, "Độ lệch": diff})
             raw_pred = b_ui + (np.sum(top_sims * rating_diffs) / sim_sum)
             pred = float(np.clip(raw_pred, 1.0, 5.0))

@@ -1,16 +1,23 @@
 import os
+import time
 import numpy as np
 import pandas as pd
 from typing import Tuple, Dict
 from sqlalchemy import create_engine, text
-import urllib
+from urllib.parse import quote_plus
 import pyodbc
 
 USE_SQL_SERVER = True
 DB_NAME = 'MovieRecommendationDB'
 SERVER = 'localhost'
 
+_engine = None
+
 def get_engine():
+    global _engine
+    if _engine is not None:
+        return _engine
+        
     drivers = [d for d in pyodbc.drivers()]
     driver = 'SQL Server'
     if 'ODBC Driver 17 for SQL Server' in drivers:
@@ -18,14 +25,15 @@ def get_engine():
     elif 'ODBC Driver 18 for SQL Server' in drivers:
         driver = 'ODBC Driver 18 for SQL Server'
         
-    params = urllib.parse.quote_plus(
+    params = quote_plus(
         f'DRIVER={{{driver}}};'
         f'SERVER={SERVER};'
         f'DATABASE={DB_NAME};'
         f'Trusted_Connection=yes;'
         f'TrustServerCertificate=yes;'
     )
-    return create_engine(f"mssql+pyodbc:///?odbc_connect={params}")
+    _engine = create_engine(f"mssql+pyodbc:///?odbc_connect={params}")
+    return _engine
 
 def load_raw_data(file_path: str) -> pd.DataFrame:
     if USE_SQL_SERVER:
@@ -53,8 +61,9 @@ def build_user_item_matrix(df: pd.DataFrame) -> np.ndarray:
     
     # Điền giá trị rating vào ma trận
     # Trừ 1 ở chỉ số dòng và cột vì ID trong file bắt đầu từ 1, còn chỉ số mảng bắt đầu từ 0
-    for row in df.itertuples():
-        matrix[row.user_id - 1, row.item_id - 1] = row.rating
+    user_indices = df['user_id'].values - 1
+    item_indices = df['item_id'].values - 1
+    matrix[user_indices, item_indices] = df['rating'].values
     return matrix
 
 def train_test_split_matrix(matrix: np.ndarray, test_ratio: float = 0.2, random_seed: int = 42) -> Tuple[np.ndarray, np.ndarray]:
@@ -119,7 +128,7 @@ def get_max_user_id() -> int:
         engine = get_engine()
         with engine.begin() as conn:
             res = conn.execute(text("SELECT ISNULL(MAX(user_id), 0) FROM users"))
-            return res.scalar()
+            return int(res.scalar() or 0)
     except Exception as e:
         print(f"Failed to get max user id from SQL Server: {e}")
         return 943
@@ -130,22 +139,21 @@ def add_new_user(age: int, gender: str, occupation: str, zip_code: str) -> int:
     engine = get_engine()
     with engine.begin() as conn:
         res = conn.execute(text("SELECT ISNULL(MAX(user_id), 0) FROM users"))
-        new_id = res.scalar() + 1
+        new_id = int(res.scalar() or 0) + 1
         query = text("INSERT INTO users (user_id, age, gender, occupation, zip_code) VALUES (:id, :a, :g, :o, :z)")
         conn.execute(query, {"id": new_id, "a": age, "g": gender, "o": occupation, "z": zip_code})
         return new_id
 
-def add_movie_rating(user_id: int, item_id: int, rating: int):
+def add_movie_rating(user_id: int, item_id: int, rating: int) -> None:
     if not USE_SQL_SERVER:
         raise NotImplementedError("SQL Server is not enabled.")
     engine = get_engine()
-    import time
     timestamp = int(time.time())
     with engine.begin() as conn:
         query = text("INSERT INTO ratings (user_id, movie_id, rating, timestamp) VALUES (:u, :m, :r, :t)")
         conn.execute(query, {"u": user_id, "m": item_id, "r": rating, "t": timestamp})
 
-def get_or_create_processed_matrices(data_path: str, processed_dir: str, test_ratio: float = 0.2) -> Tuple[np.ndarray, np.ndarray]:
+def get_or_create_processed_matrices(data_path: str, processed_dir: str, test_ratio: float = 0.2, force_reload: bool = False) -> Tuple[np.ndarray, np.ndarray]:
     """
     Hàm thông minh: Tự động kiểm tra file đã xử lý cũ. 
     Nếu có thì nạp lên ngay, nếu chưa có thì mới tính toán rồi lưu lại vào data/processed/
@@ -155,7 +163,7 @@ def get_or_create_processed_matrices(data_path: str, processed_dir: str, test_ra
     test_path = os.path.join(processed_dir, 'test_matrix.npy')
     
     # Nếu đã từng tính toán và lưu file trước đó, nạp trực tiếp để tiết kiệm thời gian
-    if os.path.exists(train_path) and os.path.exists(test_path):
+    if not force_reload and os.path.exists(train_path) and os.path.exists(test_path):
         train_matrix = np.load(train_path)
         test_matrix = np.load(test_path)
         return train_matrix, test_matrix

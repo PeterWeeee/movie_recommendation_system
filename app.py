@@ -797,35 +797,34 @@ elif page == "Dành Cho Developer":
                 with st.spinner("Đang tính toán đánh giá... (có thể mất 1-2 phút)"):
                     baseline_model = item_cf.baseline_predictor
 
-                    # ── Tạo các instance tạm, dùng lại similarity matrix đã train ──
-                    # 1. User-Based Căn bản (dùng Pearson)
-                    u_basic = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode='basic')
-                    u_basic.train_matrix = user_cf.train_matrix
-                    u_basic.similarity_matrix = user_cf.pearson_similarity_matrix
-                    u_basic.user_means = user_cf.user_means
+                    # 1. User-Based (dùng Pearson)
+                    u_pearson = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode='means')
+                    u_pearson.train_matrix = user_cf.train_matrix
+                    u_pearson.similarity_matrix = user_cf.pearson_similarity_matrix
+                    u_pearson.user_means = user_cf.user_means
 
-                    # 2. User-Based Means (dùng Pearson)
-                    u_means = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode='means')
-                    u_means.train_matrix = user_cf.train_matrix
-                    u_means.similarity_matrix = user_cf.pearson_similarity_matrix
-                    u_means.user_means = user_cf.user_means
-
-                    # 3. Item-Based Căn bản (dùng Cosine)
-                    i_basic = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors)
-                    i_basic.train_matrix = item_cf.train_matrix
-                    i_basic.similarity_matrix = item_cf.cosine_similarity_matrix
-                    
-                    # 4. Item-Based Trọng số (dùng Adjusted Cosine)
+                    # 2. Item-Based (dùng Adjusted Cosine)
                     i_adj_cos = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors)
                     i_adj_cos.train_matrix = item_cf.train_matrix
                     i_adj_cos.similarity_matrix = item_cf.adjusted_cosine_similarity_matrix
+                    
+                    # 3. User-Based (dùng Cosine thường)
+                    u_cosine = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode='means')
+                    u_cosine.train_matrix = user_cf.train_matrix
+                    u_cosine.similarity_matrix = user_cf.cosine_similarity_matrix
+                    u_cosine.user_means = user_cf.user_means
+
+                    # 4. Item-Based (dùng Cosine thường)
+                    i_cosine = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors)
+                    i_cosine.train_matrix = item_cf.train_matrix
+                    i_cosine.similarity_matrix = item_cf.cosine_similarity_matrix
 
                     models = {
-                        'User-CF Căn bản (Pearson)': u_basic,
-                        'User-CF Means (Pearson)': u_means,
-                        'Item-CF Căn bản (Cosine)': i_basic,
-                        'Item-CF Trọng số (Adj Cosine)': i_adj_cos,
-                        'Funk SVD': svd_model,
+                        'User-CF (Pearson)': u_pearson,
+                        'Item-CF (Adjusted Cosine)': i_adj_cos,
+                        'User-CF (Cosine)': u_cosine,
+                        'Item-CF (Cosine)': i_cosine,
+                        'SVD': svd_model,
                     }
 
                     rows = []

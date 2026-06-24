@@ -8,18 +8,18 @@ def compute_mae(test_matrix: np.ndarray, model: Any) -> float:
     Đo lường độ lệch trung bình giữa điểm dự đoán và điểm thực tế.
     Tối ưu hóa tốc độ bằng cách gọi predict_batch.
     """
-    nonzero_positions = np.argwhere(test_matrix > 0)
+    users, items = np.where(test_matrix > 0)
     
-    if len(nonzero_positions) == 0:
+    if len(users) == 0:
         return 0.0
         
-    actual_ratings = test_matrix[nonzero_positions[:, 0], nonzero_positions[:, 1]]
-    predicted_ratings = np.zeros(len(nonzero_positions))
+    actual_ratings = test_matrix[users, items]
+    predicted_ratings = np.zeros(len(users))
     
-    unique_users = np.unique(nonzero_positions[:, 0])
+    unique_users = np.unique(users)
     for user in unique_users:
-        user_mask = nonzero_positions[:, 0] == user
-        items_for_user = nonzero_positions[user_mask, 1]
+        user_mask = users == user
+        items_for_user = items[user_mask]
         preds = model.predict_batch(user, items_for_user)
         predicted_ratings[user_mask] = preds
     
@@ -31,18 +31,18 @@ def compute_rmse(test_matrix: np.ndarray, model: Any) -> float:
     Độ đo này phạt nặng hơn đối với các lỗi dự đoán lệch quá xa so với thực tế.
     Tối ưu hóa tốc độ bằng cách gọi predict_batch.
     """
-    nonzero_positions = np.argwhere(test_matrix > 0)
+    users, items = np.where(test_matrix > 0)
     
-    if len(nonzero_positions) == 0:
+    if len(users) == 0:
         return 0.0
         
-    actual_ratings = test_matrix[nonzero_positions[:, 0], nonzero_positions[:, 1]]
-    predicted_ratings = np.zeros(len(nonzero_positions))
+    actual_ratings = test_matrix[users, items]
+    predicted_ratings = np.zeros(len(users))
     
-    unique_users = np.unique(nonzero_positions[:, 0])
+    unique_users = np.unique(users)
     for user in unique_users:
-        user_mask = nonzero_positions[:, 0] == user
-        items_for_user = nonzero_positions[user_mask, 1]
+        user_mask = users == user
+        items_for_user = items[user_mask]
         preds = model.predict_batch(user, items_for_user)
         predicted_ratings[user_mask] = preds
     
@@ -53,11 +53,11 @@ def compute_precision_recall_at_k(train_matrix: np.ndarray, test_matrix: np.ndar
     Tính toán Precision@K và Recall@K.
     Chỉ lấy một tập mẫu user ngẫu nhiên để tăng tốc độ nếu ma trận lớn.
     """
-    unique_users = np.unique(np.argwhere(test_matrix > 0)[:, 0])
+    unique_users = np.unique(np.where(test_matrix > 0)[0])
     # Giới hạn số lượng user để tính toán nhanh (lấy tối đa 100 user ngẫu nhiên)
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     if len(unique_users) > 100:
-        sample_users = np.random.choice(unique_users, 100, replace=False)
+        sample_users = rng.choice(unique_users, 100, replace=False)
     else:
         sample_users = unique_users
         
@@ -84,7 +84,8 @@ def compute_precision_recall_at_k(train_matrix: np.ndarray, test_matrix: np.ndar
         # Tính số lượng phim gợi ý thực sự có trong test set và đạt yêu cầu
         hits = len(set(top_k_indices) & set(test_items))
         
-        precisions.append(hits / k)
+        actual_k = min(k, len(unviewed_items))
+        precisions.append(hits / actual_k)
         recalls.append(hits / len(test_items))
         
     if not precisions:
@@ -100,13 +101,13 @@ def compute_f1_at_k(precision: float, recall: float) -> float:
     """
     if precision + recall == 0:
         return 0.0
-    return float(2 * precision * recall / (precision + recall))
+    return 2 * precision * recall / (precision + recall)
 
 def compute_ndcg_at_k(train_matrix: np.ndarray, test_matrix: np.ndarray, model: Any, k: int = 10) -> float:
     """Tính toán NDCG@K."""
-    unique_users = np.unique(np.argwhere(test_matrix > 0)[:, 0])
-    np.random.seed(42)
-    sample_users = np.random.choice(unique_users, min(len(unique_users), 100), replace=False)
+    unique_users = np.unique(np.where(test_matrix > 0)[0])
+    rng = np.random.default_rng(42)
+    sample_users = rng.choice(unique_users, min(len(unique_users), 100), replace=False)
     ndcg_scores = []
     
     for user in sample_users:
@@ -138,10 +139,10 @@ def compute_prediction_time(test_matrix: np.ndarray, model: Any) -> float:
     Đo thời gian dự đoán (giây) trên tập test_matrix (chia trung bình cho mỗi user).
     Giúp so sánh tốc độ giữa các mô hình.
     """
-    unique_users = np.unique(np.argwhere(test_matrix > 0)[:, 0])
-    np.random.seed(42)
+    unique_users = np.unique(np.where(test_matrix > 0)[0])
+    rng = np.random.default_rng(42)
     if len(unique_users) > 50:
-        sample_users = np.random.choice(unique_users, 50, replace=False)
+        sample_users = rng.choice(unique_users, 50, replace=False)
     else:
         sample_users = unique_users
         
