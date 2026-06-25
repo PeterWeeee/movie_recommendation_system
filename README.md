@@ -16,8 +16,9 @@ movie_recommendation_system/
 │   └── processed/             # Lưu trữ ma trận Train/Test dưới dạng nhị phân (.npy)
 │                              # Giúp hệ thống nạp dữ liệu tức thì, bỏ qua bước đọc file text thô
 │
-├── docs/                    # Thư mục chứa tài liệu mô tả hệ thống
+├── docs/                      # Thư mục chứa tài liệu mô tả hệ thống
 │   ├── production_architecture.md
+│   ├── system_checking.md     # Tài liệu đánh giá và kiểm thử hệ thống
 │   └── system_principles.md
 │
 ├── models/                    # Lưu trữ các file trọng số (.pkl) của tất cả các mô hình sau khi huấn luyện
@@ -37,9 +38,12 @@ movie_recommendation_system/
 │   ├── similarity.py          # Cài đặt Cosine, Pearson và Adjusted Cosine Similarity
 │   ├── recommender.py         # Lớp thuật toán User-Based CF, Item-Based CF và Matrix Factorization (SVD)
 │   ├── content_based.py       # Hệ thống gợi ý Content-Based dựa trên TF-IDF
-│   └── evaluation.py          # Trình đo lường sai số hệ thống qua chỉ số toán học MAE và RMSE
+│   ├── evaluation.py          # Trình đo lường sai số hệ thống qua chỉ số toán học MAE và RMSE
+│   ├── explainer.py           # Giải thích kết quả gợi ý của các thuật toán
+│   └── toy_data.py            # Khởi tạo và quản lý dữ liệu Toy Dataset để kiểm thử thuật toán
 │
 ├── tests/                     # Thư mục chứa các tệp Unit Test bằng pytest
+│   ├── test_evaluation.py     # Kiểm thử các hàm đo lường sai số
 │   ├── test_recommender.py    # Kiểm thử tính đúng đắn của các thuật toán gợi ý
 │   └── test_similarity.py     # Kiểm thử các hàm tính độ tương đồng
 │
@@ -99,7 +103,16 @@ Chạy pipeline để hệ thống tự động xử lý dữ liệu và xuất 
 python scripts/train_pipeline.py
 ```
 
-### Bước 6: Chạy ứng dụng
+### Bước 6: Đồng bộ dữ liệu vào SQL Server (Tùy chọn)
+
+Nếu bạn muốn sử dụng tính năng đánh giá phim trực tiếp và cập nhật qua cơ sở dữ liệu thay vì file local, bạn cần đồng bộ dữ liệu vào SQL Server.
+Đảm bảo bạn đã cấu hình chuỗi kết nối SQL Server hợp lệ trong file `scripts/ingest_to_sqlserver.py`. Sau đó chạy:
+
+```bash
+python scripts/ingest_to_sqlserver.py
+```
+
+### Bước 7: Chạy ứng dụng
 
 **Chạy giao diện Web (Streamlit):**
 
@@ -152,13 +165,14 @@ python -m pytest tests/ -v
 - 👤 **Đánh giá của người dùng**: Quản lý hồ sơ cá nhân với 2 tab:
   - **Lịch sử đánh giá**: Xem lại danh sách các phim đã đánh giá dưới dạng thẻ ảnh trực quan hoặc dạng bảng.
   - **Đánh giá film**: Tìm kiếm, chấm điểm phim mới và cập nhật trực tiếp vào hệ thống (cập nhật qua ma trận/SQL).
-- 👨‍💻 **Dành Cho Developer**: Không gian phân tích kỹ thuật chuyên sâu với 3 tab:
+- 👨‍💻 **Dành Cho Developer**: Không gian phân tích kỹ thuật chuyên sâu với 4 tab:
   - **Trực Quan Hóa Dữ Liệu**: Biểu đồ độ thưa thớt (Sparsity), hiện tượng Long-Tail, và không gian đặc trưng ẩn 2D của SVD (PCA).
   - **Phân tích và Đánh giá Mô hình**: Đồ thị Training Loss của SVD và bảng so sánh MAE, RMSE, Precision@K, Recall@K, và Tốc độ dự đoán giữa các thuật toán. Bảng so sánh nay cung cấp cái nhìn đối sánh trực tiếp giữa các chuẩn khoảng cách: User-Based (Pearson vs Cosine), Item-Based (Adjusted Cosine vs Cosine), và SVD.
   - **So Sánh Thuật Toán**: So sánh song song top phim gợi ý từ các thuật toán khác nhau cho cùng một User, kèm theo giải thích chi tiết các bước thuật toán đã làm khi gợi ý phim:
     - **User-Based CF**: Trích xuất dữ liệu nền, tìm láng giềng tương đồng (những người dùng giống nhau), điều chỉnh sai số và tổng hợp thành dự đoán.
     - **Item-Based CF**: Đánh giá dựa trên độ tương đồng giữa các bộ phim, trích xuất ma trận con, và tính toán dự đoán từ các phim láng giềng.
     - **SVD (Matrix Factorization)**: Tách các thành phần mốc nền (Bias), khớp không gian đặc trưng ẩn (Latent Factors) giữa User và Item, rồi dùng công thức tích vô hướng để đưa ra điểm dự đoán cuối cùng.
+  - **Kiểm thử Toy Dataset**: Môi trường giả lập với dữ liệu nhỏ (Toy Dataset) để kiểm chứng, theo dõi và debug trực quan các bước tính toán chi tiết của hệ thống (như tính độ tương đồng, dự đoán điểm) trước khi áp dụng trên tập dữ liệu lớn.
 
 ## 7. Thư Viện Sử Dụng
 
