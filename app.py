@@ -583,7 +583,7 @@ elif page == "Dành Cho Developer":
     with center_col:
         st.title("Bảng Điều Khiển & Đánh Giá Thuật Toán")
         
-        tab1, tab2, tab3 = st.tabs(["Khám Phá Dữ Liệu", "Đánh Giá Mô Hình", "Phân Tích Chi Tiết"])
+        tab1, tab2, tab3, tab4 = st.tabs(["Khám Phá Dữ Liệu", "Đánh Giá Mô Hình", "Phân Tích Chi Tiết", "Kiểm Thử Toy Dataset"])
         
         with tab1:
             st.header("Khám Phá Dữ Liệu (EDA)")
@@ -985,3 +985,176 @@ elif page == "Dành Cho Developer":
                                         with st.expander(f"**{rank}.** {name} (ID: {int(idx)+1}) - Xem chi tiết"):
                                             viz_data = AlgorithmExplainer.get_svd_viz_data(svd_model, user_idx, idx, movie_titles)
                                             render_visualizer("SVD", viz_data)
+
+        with tab4:
+            st.header("Kiểm Thử Toy Dataset (10x10)")
+            st.caption("💡 Lưu ý: Điểm đánh giá dao động từ 1 đến 5 sao. Các ô trống tương đương với giá trị 0 (chưa đánh giá).")
+            from src.toy_data import get_toy_matrix, get_toy_movie_titles, get_toy_train_test_split
+            from src.similarity import compute_cosine_similarity, compute_pearson_similarity, compute_adjusted_cosine_similarity
+            
+            toy_matrix = get_toy_matrix()
+            toy_titles = get_toy_movie_titles()
+            
+            tab_toy_eda, tab_toy_eval, tab_toy_analysis = st.tabs(["1. Khám Phá Dữ Liệu (Toy)", "2. Đánh Giá Mô Hình (Toy)", "3. Phân Tích Chi Tiết (Toy)"])
+            
+            with tab_toy_eda:
+                st.subheader("Ma Trận Gốc (10 Users x 10 Items)")
+                
+                def display_matrix(mat, title="Ma trận"):
+                    df = pd.DataFrame(mat)
+                    df.index = [f"User {i+1}" for i in range(10)]
+                    df.columns = [toy_titles.get(i+1, f"Item {i+1}") for i in range(10)]
+                    display_df = df.replace(0, None)
+                    st.dataframe(display_df, use_container_width=True)
+                
+                display_matrix(toy_matrix, "Ma Trận Gốc")
+                
+                st.markdown("---")
+                st.subheader("Phân tách Train / Test")
+                st.markdown("Tách ngẫu nhiên 20% các ô đã đánh giá sang tập Test để đánh giá thuật toán.")
+                toy_train, toy_test = get_toy_train_test_split(test_ratio=0.2)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("**Ma Trận Huấn Luyện (Train Matrix)**")
+                    display_matrix(toy_train)
+                with col2:
+                    st.markdown("**Ma Trận Kiểm Thử (Test Matrix)**")
+                    display_matrix(toy_test)
+                    
+                st.markdown("---")
+                st.subheader("Ma Trận Tương Đồng (Train Matrix)")
+                user_pearson = compute_pearson_similarity(toy_train)
+                item_adj = compute_adjusted_cosine_similarity(toy_train)
+                
+                col3, col4 = st.columns(2)
+                with col3:
+                    st.markdown("**Độ tương đồng giữa các User (Pearson)**")
+                    fig_u, ax_u = plt.subplots(figsize=(6, 5))
+                    sns.heatmap(user_pearson, annot=True, fmt=".1f", cmap="YlGnBu", ax=ax_u,
+                                xticklabels=[f"U{i+1}" for i in range(10)], yticklabels=[f"U{i+1}" for i in range(10)])
+                    st.pyplot(fig_u)
+                    plt.close(fig_u)
+                with col4:
+                    st.markdown("**Độ tương đồng giữa các Item (Adj Cosine)**")
+                    fig_i, ax_i = plt.subplots(figsize=(6, 5))
+                    sns.heatmap(item_adj, annot=True, fmt=".1f", cmap="YlGnBu", ax=ax_i,
+                                xticklabels=[f"I{i+1}" for i in range(10)], yticklabels=[f"I{i+1}" for i in range(10)])
+                    st.pyplot(fig_i)
+                    plt.close(fig_i)
+
+            with tab_toy_eval:
+                st.subheader("Đánh Giá trên Toy Dataset")
+                st.markdown("Sử dụng tập Train/Test (80/20) đã chia ở bước trước để tính MAE, RMSE, và Precision/Recall/F1@3.")
+                if st.button("Chạy Đánh Giá Toy Dataset", key="btn_eval_toy"):
+                    with st.spinner("Đang huấn luyện và đánh giá trên Toy Dataset..."):
+                        toy_train, toy_test = get_toy_train_test_split(test_ratio=0.2)
+                        
+                        user_pearson = compute_pearson_similarity(toy_train)
+                        user_cosine = compute_cosine_similarity(toy_train)
+                        item_adj = compute_adjusted_cosine_similarity(toy_train)
+                        item_cosine = compute_cosine_similarity(toy_train.T)
+                        
+                        toy_u_pearson = UserBasedCollaborativeFiltering(k_neighbors=3, prediction_mode='means')
+                        toy_u_pearson.fit(toy_train, user_pearson)
+                        
+                        toy_u_cosine = UserBasedCollaborativeFiltering(k_neighbors=3, prediction_mode='means')
+                        toy_u_cosine.fit(toy_train, user_cosine)
+                        
+                        toy_i_adj = ItemBasedCollaborativeFiltering(k_neighbors=3)
+                        toy_i_adj.fit(toy_train, item_adj)
+                        
+                        toy_i_cosine = ItemBasedCollaborativeFiltering(k_neighbors=3)
+                        toy_i_cosine.fit(toy_train, item_cosine)
+                        
+                        toy_svd = MatrixFactorizationSVD(num_factors=5, lr=0.01, reg=0.02, epochs=50)
+                        toy_svd.fit(toy_train, toy_test)
+                        
+                        models = {
+                            'User-CF (Pearson)': toy_u_pearson,
+                            'Item-CF (Adj Cosine)': toy_i_adj,
+                            'User-CF (Cosine)': toy_u_cosine,
+                            'Item-CF (Cosine)': toy_i_cosine,
+                            'SVD': toy_svd,
+                        }
+                        
+                        st.markdown("### Dữ liệu dùng cho Đánh giá")
+                        test_users, test_items = np.where(toy_test > 0)
+                        test_data_md = "| User | Phim (Item) | Điểm thật (Ground Truth) |\n|---|---|---|\n"
+                        for u, i in zip(test_users, test_items):
+                            name = toy_titles.get(i+1, f"Item {i}")
+                            test_data_md += f"| User {u+1} | {name} | {toy_test[u, i]:.1f} |\n"
+                        
+                        with st.expander("Xem chi tiết dữ liệu Test (dùng cho MAE, RMSE)"):
+                            st.markdown("Các điểm số dưới đây được dùng làm đáp án để so sánh độ lệch với điểm dự đoán của mô hình:")
+                            st.markdown(test_data_md)
+                            
+                        with st.expander("Xem chi tiết cấu hình Precision/Recall@3"):
+                            st.markdown("- **K = 3**: Chỉ xét 3 phim có điểm dự đoán cao nhất.\n- **Threshold = 3.5**: Phim có điểm thật >= 3.5 mới được coi là 'thực sự thích' (Ground Truth Positive).")
+                            pr_md = "| User | Tập phim ứng viên (Chưa xem trong Train) | Phim đáp án (Test >= 3.5) |\n|---|---|---|\n"
+                            for u in np.unique(test_users):
+                                positive_items = np.where(toy_test[u] >= 3.5)[0]
+                                pos_names = [toy_titles.get(i+1, f"I{i}") for i in positive_items]
+                                
+                                unviewed = np.where(toy_train[u] == 0)[0]
+                                
+                                pr_md += f"| User {u+1} | {len(unviewed)} phim | {', '.join(pos_names) if pos_names else 'Không có (Bỏ qua)'} |\n"
+                            st.markdown(pr_md)
+                        
+                        rows = []
+                        for name, model in models.items():
+                            mae  = compute_mae(toy_test, model)
+                            rmse = compute_rmse(toy_test, model)
+                            p, r = compute_precision_recall_at_k(toy_train, toy_test, model, k=3, threshold=3.5)
+                            f1 = compute_f1_at_k(p, r)
+                            rows.append({'Thuật toán': name, 'MAE': mae, 'RMSE': rmse, 'Precision@3': p, 'Recall@3': r, 'F1@3': f1})
+                        
+                        eval_df = pd.DataFrame(rows).set_index('Thuật toán')
+                        st.dataframe(eval_df.style.highlight_min(subset=['MAE', 'RMSE'], color='lightgreen')
+                                     .highlight_max(subset=['Precision@3', 'Recall@3', 'F1@3'], color='lightgreen')
+                                     .format("{:.4f}"))
+            
+            with tab_toy_analysis:
+                st.subheader("Phân Tích Chi Tiết (Explain) trên Toy Dataset")
+                st.markdown("Chọn một User và Thuật Toán để xem chi tiết cách dự đoán các ô chưa đánh giá. Lưu ý: Thuật toán được train trên tập **Train Matrix** (đã bị giấu đi 20% dữ liệu), đảm bảo các con số Similarity ở đây khớp hoàn toàn 100% với bảng Heatmap ở phần Khám Phá.")
+                
+                toy_train_exp, _ = get_toy_train_test_split(test_ratio=0.2)
+                
+                user_pearson_exp = compute_pearson_similarity(toy_train_exp)
+                item_adj_exp = compute_adjusted_cosine_similarity(toy_train_exp)
+                
+                toy_u_model_exp = UserBasedCollaborativeFiltering(k_neighbors=3, prediction_mode='means')
+                toy_u_model_exp.fit(toy_train_exp, user_pearson_exp)
+                
+                toy_i_model_exp = ItemBasedCollaborativeFiltering(k_neighbors=3)
+                toy_i_model_exp.fit(toy_train_exp, item_adj_exp)
+                
+                toy_svd_model_exp = MatrixFactorizationSVD(num_factors=5, lr=0.01, reg=0.02, epochs=50)
+                toy_svd_model_exp.fit(toy_train_exp)
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    test_user_toy = st.number_input("Chọn User (1-10):", min_value=1, max_value=10, value=1, step=1, key='test_user_toy')
+                with c2:
+                    algo_choice = st.selectbox("Chọn Thuật Toán:", ["User-Based CF (Pearson)", "Item-Based CF (Adj Cosine)", "SVD"], key="toy_algo")
+                
+                if st.button("Giải Thích Dự Đoán"):
+                    user_idx = test_user_toy - 1
+                    unviewed_items = np.where(toy_train_exp[user_idx] == 0)[0]
+                    if len(unviewed_items) == 0:
+                        st.warning(f"User {test_user_toy} đã xem tất cả các phim!")
+                    else:
+                        st.write(f"Các phim User {test_user_toy} chưa xem: {[toy_titles.get(int(i)+1) for i in unviewed_items]}")
+                        for idx in unviewed_items[:5]: 
+                            idx_for_title = int(idx) + 1
+                            name = toy_titles.get(idx_for_title, f"Item {idx}")
+                            with st.expander(f"Dự đoán cho {name} (Item Index: {idx})"):
+                                if algo_choice == "User-Based CF (Pearson)":
+                                    viz_data = AlgorithmExplainer.get_user_based_viz_data(toy_u_model_exp, user_idx, idx, toy_titles)
+                                    render_visualizer("User-Based CF", viz_data)
+                                elif algo_choice == "Item-Based CF (Adj Cosine)":
+                                    viz_data = AlgorithmExplainer.get_item_based_viz_data(toy_i_model_exp, user_idx, idx, toy_titles)
+                                    render_visualizer("Item-Based CF", viz_data)
+                                else:
+                                    viz_data = AlgorithmExplainer.get_svd_viz_data(toy_svd_model_exp, user_idx, idx, toy_titles)
+                                    render_visualizer("SVD", viz_data)

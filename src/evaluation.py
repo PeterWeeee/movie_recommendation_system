@@ -65,25 +65,26 @@ def compute_precision_recall_at_k(train_matrix: np.ndarray, test_matrix: np.ndar
     recalls = []
     
     for user in sample_users:
-        # Tất cả các phim trong test set của user
-        test_items_all = np.where(test_matrix[user] > 0)[0]
         # Các phim thực sự được user đánh giá cao (>= threshold)
         test_items_positive = np.where(test_matrix[user] >= threshold)[0]
         
         if len(test_items_positive) == 0:
             continue
             
-        # Dự đoán điểm cho tất cả các phim trong test set
-        preds = model.predict_batch(user, test_items_all)
+        # Dự đoán điểm cho TẤT CẢ các phim chưa xem trong train set (bao gồm cả test_items)
+        unviewed_in_train = np.where(train_matrix[user] == 0)[0]
+        if len(unviewed_in_train) == 0:
+            continue
+            
+        preds = model.predict_batch(user, unviewed_in_train)
         
-        # Lấy top K phim có điểm dự đoán cao nhất (chỉ xếp hạng các phim trong test set)
-        top_k_indices = test_items_all[np.argsort(preds)[-k:][::-1]]
+        # Lấy top K phim có điểm dự đoán cao nhất
+        top_k_indices = unviewed_in_train[np.argsort(preds)[-k:][::-1]]
         
         # Số phim dự đoán nằm trong top K thực sự là phim tốt
         hits = len(set(top_k_indices) & set(test_items_positive))
         
-        actual_k = min(k, len(test_items_all))
-        precisions.append(hits / actual_k)
+        precisions.append(hits / k)
         recalls.append(hits / len(test_items_positive))
         
     if not precisions:
@@ -113,15 +114,23 @@ def compute_ndcg_at_k(train_matrix: np.ndarray, test_matrix: np.ndarray, model: 
         if len(test_items) == 0:
             continue
             
-        preds = model.predict_batch(user, test_items)
-        top_k_indices = test_items[np.argsort(preds)[-k:][::-1]]
+        # Dự đoán cho toàn bộ phim chưa xem trong train
+        unviewed_in_train = np.where(train_matrix[user] == 0)[0]
+        if len(unviewed_in_train) == 0:
+            continue
+            
+        preds = model.predict_batch(user, unviewed_in_train)
+        top_k_indices = unviewed_in_train[np.argsort(preds)[-k:][::-1]]
         
         dcg = 0.0
-        idcg = 0.0
         for i, idx in enumerate(top_k_indices):
-            dcg += (2**test_matrix[user, idx] - 1) / np.log2(i + 2)
+            # Nếu phim gợi ý nằm trong test set thì lấy điểm thật, nếu không coi như 0 điểm (không quan trọng)
+            true_rating = test_matrix[user, idx] if test_matrix[user, idx] > 0 else 0
+            if true_rating > 0:
+                dcg += (2**true_rating - 1) / np.log2(i + 2)
         
         sorted_test = np.sort(test_matrix[user, test_items])[::-1]
+        idcg = 0.0
         for i in range(min(k, len(sorted_test))):
             idcg += (2**sorted_test[i] - 1) / np.log2(i + 2)
             

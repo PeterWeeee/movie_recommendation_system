@@ -19,9 +19,16 @@ class AlgorithmExplainer:
             return f"Không có láng giềng nào đánh giá phim này. Điểm cơ sở: {base_rating:.2f}"
             
         similarities = similarity_matrix[user_idx, other_users]
-        top_indices = np.argsort(similarities)[::-1][:model.k_neighbors]
-        top_similarities = similarities[top_indices]
-        top_other_users = other_users[top_indices]
+        valid_mask = similarities > 0
+        if not np.any(valid_mask):
+            return f"Không có láng giềng nào có độ tương đồng dương. Điểm cơ sở: {base_rating:.2f}"
+            
+        valid_sims = similarities[valid_mask]
+        valid_users = other_users[valid_mask]
+        
+        top_indices = np.argsort(valid_sims)[::-1][:model.k_neighbors]
+        top_similarities = valid_sims[top_indices]
+        top_other_users = valid_users[top_indices]
         
         sim_sum = np.sum(np.abs(top_similarities))
         if sim_sum == 0:
@@ -61,8 +68,8 @@ $$ \\text{{Pred}} = \\text{{Mean}}_{{user}} + \\frac{{\\sum \\text{{Sim}} \\time
                 formula += f"**Điểm sau khi giới hạn (Clip 1-5):** {pred:.2f}\n"
         elif mode == 'biased_baseline':
             table_md += "Bias Láng Giềng ($b_{{vi}}$) | Độ lệch ($R - b_{{vi}}$) |\n|---|---|---|---|---|\n"
-            b_ui = baseline_predictor.predict_rating(user_idx, item_idx)
-            b_vi = np.array([baseline_predictor.predict_rating(v, item_idx) for v in top_other_users])
+            b_ui = baseline_predictor.mu + baseline_predictor.b_u[user_idx] + baseline_predictor.b_i[item_idx]
+            b_vi = baseline_predictor.mu + baseline_predictor.b_u[top_other_users] + baseline_predictor.b_i[item_idx]
             rating_diffs = ratings - b_vi
             for u, sim, r, b, diff in zip(top_other_users, top_similarities, ratings, b_vi, rating_diffs):
                 table_md += f"| User {u+1} | {sim:.3f} | {r:.1f} | {b:.2f} | {diff:+.2f} |\n"
@@ -100,11 +107,16 @@ Bảng phân tích chi tiết {len(top_other_users)} láng giềng gần nhất 
             return "User chưa đánh giá phim nào."
             
         similarities = similarity_matrix[item_idx, rated_items]
-        top_k_idx = np.argsort(similarities)[-model.k_neighbors:]
-        top_k_idx = top_k_idx[::-1]
+        valid_mask = similarities > 0
+        if not np.any(valid_mask):
+            return "Không có phim nào tương đồng (sim > 0)."
+            
+        valid_sims = similarities[valid_mask]
+        valid_rated = rated_items[valid_mask]
         
-        top_sims = similarities[top_k_idx]
-        top_rated_items = rated_items[top_k_idx]
+        top_k_idx = np.argsort(valid_sims)[-model.k_neighbors:][::-1]
+        top_sims = valid_sims[top_k_idx]
+        top_rated_items = valid_rated[top_k_idx]
         
         sim_sum = np.sum(np.abs(top_sims))
         if sim_sum == 0:
@@ -129,8 +141,8 @@ Bảng phân tích chi tiết {len(top_other_users)} láng giềng gần nhất 
             
         elif mode == 'biased_baseline':
             table_md += "Bias Phim láng giềng ($b_{{uj}}$) | Độ lệch ($R - b_{{uj}}$) |\n|---|---|---|---|---|\n"
-            b_ui = baseline_predictor.predict_rating(user_idx, item_idx)
-            b_uj = np.array([baseline_predictor.predict_rating(user_idx, j) for j in top_rated_items])
+            b_ui = baseline_predictor.mu + baseline_predictor.b_u[user_idx] + baseline_predictor.b_i[item_idx]
+            b_uj = baseline_predictor.mu + baseline_predictor.b_u[user_idx] + baseline_predictor.b_i[top_rated_items]
             rating_diffs = ratings - b_uj
             for i, sim, r, b, diff in zip(top_rated_items, top_sims, ratings, b_uj, rating_diffs):
                 name = f"[{int(i)+1}] " + movie_titles.get(int(i)+1, f"Phim {i+1}")
@@ -269,9 +281,16 @@ $$ \\text{{Pred}} = {mu:.2f} + {b_u:.2f} + {b_i:.2f} + {dot_product:.2f} = {raw_
             return {"error": f"Không có láng giềng nào đánh giá phim này. Điểm cơ sở: {base_rating:.2f}"}
             
         similarities = similarity_matrix[user_idx, other_users]
-        top_indices = np.argsort(similarities)[::-1][:model.k_neighbors]
-        top_similarities = similarities[top_indices]
-        top_other_users = other_users[top_indices]
+        valid_mask = similarities > 0
+        if not np.any(valid_mask):
+            return {"error": f"Không có láng giềng nào có độ tương đồng dương. Điểm cơ sở: {base_rating:.2f}"}
+            
+        valid_sims = similarities[valid_mask]
+        valid_users = other_users[valid_mask]
+        
+        top_indices = np.argsort(valid_sims)[::-1][:model.k_neighbors]
+        top_similarities = valid_sims[top_indices]
+        top_other_users = valid_users[top_indices]
         
         sim_sum = np.sum(np.abs(top_similarities))
         if sim_sum == 0:
@@ -321,8 +340,8 @@ $$ \\text{{Pred}} = {mu:.2f} + {b_u:.2f} + {b_i:.2f} + {dot_product:.2f} = {raw_
                 formula_latex += f"\n\n**Điểm sau khi giới hạn (Clip 1-5):** {pred:.2f}"
             formula_data["formula_latex"] = formula_latex
         elif mode == 'biased_baseline':
-            b_ui = baseline_predictor.predict_rating(user_idx, item_idx)
-            b_vi = np.array([baseline_predictor.predict_rating(v, item_idx) for v in top_other_users])
+            b_ui = baseline_predictor.mu + baseline_predictor.b_u[user_idx] + baseline_predictor.b_i[item_idx]
+            b_vi = baseline_predictor.mu + baseline_predictor.b_u[top_other_users] + baseline_predictor.b_i[item_idx]
             rating_diffs = ratings - b_vi
             for u, sim, r, b, diff in zip(top_other_users, top_similarities, ratings, b_vi, rating_diffs):
                 step3_data["details"].append({"User ID": f"User {u+1}", "Similarity": sim, "Rating": r, "Bias": b, "Độ lệch": diff})
@@ -360,9 +379,16 @@ $$ \\text{{Pred}} = {mu:.2f} + {b_u:.2f} + {b_i:.2f} + {dot_product:.2f} = {raw_
             return {"error": "User chưa đánh giá phim nào."}
             
         similarities = similarity_matrix[item_idx, rated_items]
-        top_k_idx = np.argsort(similarities)[-model.k_neighbors:][::-1]
-        top_sims = similarities[top_k_idx]
-        top_rated_items = rated_items[top_k_idx]
+        valid_mask = similarities > 0
+        if not np.any(valid_mask):
+            return {"error": "Không có phim nào tương đồng (sim > 0)."}
+            
+        valid_sims = similarities[valid_mask]
+        valid_rated = rated_items[valid_mask]
+        
+        top_k_idx = np.argsort(valid_sims)[-model.k_neighbors:][::-1]
+        top_sims = valid_sims[top_k_idx]
+        top_rated_items = valid_rated[top_k_idx]
         
         sim_sum = np.sum(np.abs(top_sims))
         if sim_sum == 0:
@@ -402,8 +428,8 @@ $$ \\text{{Pred}} = {mu:.2f} + {b_u:.2f} + {b_i:.2f} + {dot_product:.2f} = {raw_
                 formula_latex += f"\n\n**Điểm sau khi giới hạn (Clip 1-5):** {pred:.2f}"
             formula_data["formula_latex"] = formula_latex
         elif mode == 'biased_baseline':
-            b_ui = baseline_predictor.predict_rating(user_idx, item_idx)
-            b_uj = np.array([baseline_predictor.predict_rating(user_idx, j) for j in top_rated_items])
+            b_ui = baseline_predictor.mu + baseline_predictor.b_u[user_idx] + baseline_predictor.b_i[item_idx]
+            b_uj = baseline_predictor.mu + baseline_predictor.b_u[user_idx] + baseline_predictor.b_i[top_rated_items]
             rating_diffs = ratings - b_uj
             for i, sim, r, b, diff in zip(top_rated_items, top_sims, ratings, b_uj, rating_diffs):
                 name = f"[{int(i)+1}] " + movie_titles.get(int(i)+1, f"Phim {i+1}")
