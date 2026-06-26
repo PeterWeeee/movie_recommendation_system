@@ -809,7 +809,7 @@ elif page == "Dành Cho Developer":
                     i_adj_cos.similarity_matrix = item_cf.adjusted_cosine_similarity_matrix
                     
                     # 3. User-Based (dùng Cosine thường)
-                    u_cosine = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode='means')
+                    u_cosine = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode='basic')
                     u_cosine.train_matrix = user_cf.train_matrix
                     u_cosine.similarity_matrix = user_cf.cosine_similarity_matrix
                     u_cosine.user_means = user_cf.user_means
@@ -1024,8 +1024,8 @@ elif page == "Dành Cho Developer":
                     
                 st.markdown("---")
                 st.subheader("Ma Trận Tương Đồng (Train Matrix)")
-                user_pearson = compute_pearson_similarity(toy_train)
-                item_adj = compute_adjusted_cosine_similarity(toy_train)
+                user_pearson = compute_pearson_similarity(toy_train, gamma=1)
+                item_adj = compute_adjusted_cosine_similarity(toy_train, gamma=1)
                 
                 col3, col4 = st.columns(2)
                 with col3:
@@ -1050,15 +1050,15 @@ elif page == "Dành Cho Developer":
                     with st.spinner("Đang huấn luyện và đánh giá trên Toy Dataset..."):
                         toy_train, toy_test = get_toy_train_test_split(test_ratio=0.2)
                         
-                        user_pearson = compute_pearson_similarity(toy_train)
+                        user_pearson = compute_pearson_similarity(toy_train, gamma=1)
                         user_cosine = compute_cosine_similarity(toy_train)
-                        item_adj = compute_adjusted_cosine_similarity(toy_train)
+                        item_adj = compute_adjusted_cosine_similarity(toy_train, gamma=1)
                         item_cosine = compute_cosine_similarity(toy_train.T)
                         
                         toy_u_pearson = UserBasedCollaborativeFiltering(k_neighbors=3, prediction_mode='means')
                         toy_u_pearson.fit(toy_train, user_pearson)
                         
-                        toy_u_cosine = UserBasedCollaborativeFiltering(k_neighbors=3, prediction_mode='means')
+                        toy_u_cosine = UserBasedCollaborativeFiltering(k_neighbors=3, prediction_mode='basic')
                         toy_u_cosine.fit(toy_train, user_cosine)
                         
                         toy_i_adj = ItemBasedCollaborativeFiltering(k_neighbors=3)
@@ -1080,10 +1080,17 @@ elif page == "Dành Cho Developer":
                         
                         st.markdown("### Dữ liệu dùng cho Đánh giá")
                         test_users, test_items = np.where(toy_test > 0)
-                        test_data_md = "| User | Phim (Item) | Điểm thật (Ground Truth) |\n|---|---|---|\n"
+                        
+                        headers_test = ["User", "Phim (Item)", "Điểm thật"] + list(models.keys())
+                        test_data_md = "| " + " | ".join(headers_test) + " |\n"
+                        test_data_md += "|" + "|".join(["---"] * len(headers_test)) + "|\n"
+                        
                         for u, i in zip(test_users, test_items):
                             name = toy_titles.get(i+1, f"Item {i}")
-                            test_data_md += f"| User {u+1} | {name} | {toy_test[u, i]:.1f} |\n"
+                            row = [f"User {u+1}", name, f"{toy_test[u, i]:.1f}"]
+                            for model in models.values():
+                                row.append(f"{model.predict_rating(u, i):.2f}")
+                            test_data_md += "| " + " | ".join(row) + " |\n"
                         
                         with st.expander("Xem chi tiết dữ liệu Test (dùng cho MAE, RMSE)"):
                             st.markdown("Các điểm số dưới đây được dùng làm đáp án để so sánh độ lệch với điểm dự đoán của mô hình:")
@@ -1091,14 +1098,29 @@ elif page == "Dành Cho Developer":
                             
                         with st.expander("Xem chi tiết cấu hình Precision/Recall@3"):
                             st.markdown("- **K = 3**: Chỉ xét 3 phim có điểm dự đoán cao nhất.\n- **Threshold = 3.5**: Phim có điểm thật >= 3.5 mới được coi là 'thực sự thích' (Ground Truth Positive).")
-                            pr_md = "| User | Tập phim ứng viên (Chưa xem trong Train) | Phim đáp án (Test >= 3.5) |\n|---|---|---|\n"
+                            
+                            headers_pr = ["User", "Ứng viên (Chưa xem)", "Đáp án (>= 3.5)"] + [f"Dự đoán ({m})" for m in models.keys()]
+                            pr_md = "| " + " | ".join(headers_pr) + " |\n"
+                            pr_md += "|" + "|".join(["---"] * len(headers_pr)) + "|\n"
+                            
                             for u in np.unique(test_users):
                                 positive_items = np.where(toy_test[u] >= 3.5)[0]
                                 pos_names = [toy_titles.get(i+1, f"I{i}") for i in positive_items]
                                 
                                 unviewed = np.where(toy_train[u] == 0)[0]
                                 
-                                pr_md += f"| User {u+1} | {len(unviewed)} phim | {', '.join(pos_names) if pos_names else 'Không có (Bỏ qua)'} |\n"
+                                row = [f"User {u+1}", f"{len(unviewed)} phim", ', '.join(pos_names) if pos_names else 'Không có (Bỏ qua)']
+                                
+                                for model in models.values():
+                                    if len(unviewed) > 0:
+                                        preds = model.predict_batch(u, unviewed)
+                                        top_k_idx = unviewed[np.argsort(preds)[::-1][:3]]
+                                        top_names = [toy_titles.get(i+1, f"I{i}") for i in top_k_idx]
+                                        row.append(", ".join(top_names))
+                                    else:
+                                        row.append("N/A")
+                                        
+                                pr_md += "| " + " | ".join(row) + " |\n"
                             st.markdown(pr_md)
                         
                         rows = []
@@ -1120,8 +1142,8 @@ elif page == "Dành Cho Developer":
                 
                 toy_train_exp, _ = get_toy_train_test_split(test_ratio=0.2)
                 
-                user_pearson_exp = compute_pearson_similarity(toy_train_exp)
-                item_adj_exp = compute_adjusted_cosine_similarity(toy_train_exp)
+                user_pearson_exp = compute_pearson_similarity(toy_train_exp, gamma=1)
+                item_adj_exp = compute_adjusted_cosine_similarity(toy_train_exp, gamma=1)
                 
                 toy_u_model_exp = UserBasedCollaborativeFiltering(k_neighbors=3, prediction_mode='means')
                 toy_u_model_exp.fit(toy_train_exp, user_pearson_exp)

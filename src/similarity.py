@@ -3,26 +3,23 @@ import numpy as np
 def compute_cosine_similarity(matrix: np.ndarray) -> np.ndarray:
     """
     Tính ma trận độ tương đồng Cosine giữa các dòng (Users hoặc Items).
-    Đã cập nhật: Chỉ tính toán mẫu số (norm) trên các item cùng được đánh giá (co-rated items).
+    Sử dụng công thức gốc: norm được tính trên toàn bộ vector (global norm).
     """
     epsilon = 1e-9  # Tránh lỗi chia cho 0
-    mask = matrix > 0
     
     # Tích vô hướng (dot product) tự nhiên chỉ tính trên các ô cùng có giá trị > 0
     dot_product = matrix.dot(matrix.T)
     
-    # Tính norm chỉ trên các item cùng được đánh giá (co-rated items)
-    sq_matrix = matrix ** 2
-    norm_u_sq = sq_matrix.dot(mask.T)
-    norm_v_sq = mask.dot(sq_matrix.T)
-    norm_matrix = np.sqrt(norm_u_sq * norm_v_sq)
+    # Tính norm trên toàn bộ chiều của vector (công thức Cosine nguyên thủy)
+    norm = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norm_matrix = norm.dot(norm.T)
     
     return dot_product / (norm_matrix + epsilon)
 
-def compute_pearson_similarity(matrix: np.ndarray) -> np.ndarray:
+def compute_pearson_similarity(matrix: np.ndarray, gamma: int = 50) -> np.ndarray:
     """
     Tính ma trận hệ số tương quan Pearson giữa các dòng (Users).
-    Chuẩn hóa bằng cách trừ đi điểm trung bình của từng user (chỉ tính các ô đã đánh giá > 0).
+    Sử dụng significance weighting để giảm trọng số của những cặp có quá ít co-rated items.
     """
     epsilon = 1e-9
     mask = matrix > 0  # Đánh dấu các vị trí có dữ liệu đánh giá
@@ -46,12 +43,17 @@ def compute_pearson_similarity(matrix: np.ndarray) -> np.ndarray:
     
     raw_sim = dot_product / (norm_matrix + epsilon)
     
-    return raw_sim
+    # Áp dụng Significance Weighting
+    mask_int = mask.astype(int)
+    co_rated_counts = mask_int.dot(mask_int.T)
+    significance_weights = np.minimum(co_rated_counts, gamma) / gamma
+    
+    return raw_sim * significance_weights
 
-def compute_adjusted_cosine_similarity(matrix: np.ndarray) -> np.ndarray:
+def compute_adjusted_cosine_similarity(matrix: np.ndarray, gamma: int = 50) -> np.ndarray:
     """
     Tính ma trận Adjusted Cosine Similarity giữa các cột (Items).
-    Đo độ tương đồng giữa item i và item j, nhưng trừ đi điểm trung bình của user đã xem cả hai.
+    Sử dụng significance weighting.
     Đầu vào: matrix (num_users x num_items)
     Đầu ra: ma trận tương đồng (num_items x num_items)
     """
@@ -82,4 +84,9 @@ def compute_adjusted_cosine_similarity(matrix: np.ndarray) -> np.ndarray:
     
     raw_sim = dot_product / (norm_matrix + epsilon)
     
-    return raw_sim
+    # Áp dụng Significance Weighting
+    mask_item_int = mask_item.astype(int)
+    co_rated_counts = mask_item_int.dot(mask_item_int.T)
+    significance_weights = np.minimum(co_rated_counts, gamma) / gamma
+    
+    return raw_sim * significance_weights
