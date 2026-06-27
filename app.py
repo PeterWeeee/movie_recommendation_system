@@ -827,6 +827,7 @@ elif page == "Dành Cho Developer":
                         'SVD': svd_model,
                     }
 
+                    from src.evaluation import compute_training_time
                     rows = []
                     progress = st.progress(0, text="Đang đánh giá...")
                     total = len(models)
@@ -835,22 +836,28 @@ elif page == "Dành Cho Developer":
                         if model is None:
                             rows.append({'Thuật toán': name, 'MAE': 0.0, 'RMSE': 0.0,
                                          'Precision@10': 0.0, 'Recall@10': 0.0,
-                                         'F1@10': 0.0, 'Execution Time (s/user)': 0.0})
+                                         'F1@10': 0.0, 'Execution Time (s/user)': 0.0,
+                                         'Thời gian Train (s)': 0.0})
                             continue
                         mae  = compute_mae(test_matrix, model)
                         rmse = compute_rmse(test_matrix, model)
                         p, r = compute_precision_recall_at_k(train_matrix, test_matrix, model)
                         f1   = compute_f1_at_k(p, r)
                         spd  = compute_prediction_time(test_matrix, model)
+                        
+                        # Đo thời gian huấn luyện thực tế
+                        t_train = compute_training_time(train_matrix, model, test_matrix)
+                        
                         rows.append({'Thuật toán': name, 'MAE': mae, 'RMSE': rmse,
                                      'Precision@10': p, 'Recall@10': r,
-                                     'F1@10': f1, 'Execution Time (s/user)': spd})
+                                     'F1@10': f1, 'Execution Time (s/user)': spd,
+                                     'Thời gian Train (s)': t_train})
                     progress.progress(1.0, text="Hoàn tất!")
 
                     eval_df = pd.DataFrame(rows).set_index('Thuật toán')
                     st.markdown("**Bảng So Sánh Hiệu Năng trên Test Set**")
                     ranking_metrics = ['Precision@10', 'Recall@10', 'F1@10']
-                    error_metrics   = ['MAE', 'RMSE', 'Execution Time (s/user)']
+                    error_metrics   = ['MAE', 'RMSE', 'Execution Time (s/user)', 'Thời gian Train (s)']
                     st.dataframe(
                         eval_df.style
                         .highlight_min(subset=error_metrics, color='lightgreen')
@@ -909,36 +916,36 @@ elif page == "Dành Cho Developer":
                                     user_recs.append({"title": name, "score": f"{score:.2f} ⭐", "rank": rank, "movie_id": int(idx) + 1})
                                 render_movie_grid(user_recs, tmdb_key, cols_count=5)
                                 
-                                # --- User-Based CF (Means) ---
+                                # --- User-Based CF (Means - Pearson) ---
                                 temp_user_cf_means = UserBasedCollaborativeFiltering(k_neighbors=user_cf.k_neighbors, prediction_mode='means')
                                 temp_user_cf_means.train_matrix = user_cf.train_matrix
-                                temp_user_cf_means.similarity_matrix = user_cf.similarity_matrix
+                                temp_user_cf_means.similarity_matrix = user_cf.pearson_similarity_matrix
                                 temp_user_cf_means.user_means = user_cf.user_means
                                 preds_user_means = temp_user_cf_means.predict_batch(user_idx, unviewed_items)
                                 top_user_idx_means = unviewed_items[np.argsort(preds_user_means)[-top_k:][::-1]]
                                 top_scores_user = preds_user_means[np.argsort(preds_user_means)[-top_k:][::-1]]
 
-                                st.subheader(f"Kết quả gợi ý từ User-Based CF (Means) ({top_k} phim):")
+                                st.subheader(f"Kết quả gợi ý từ User-Based CF (Means - Pearson) ({top_k} phim):")
                                 user_recs_means = []
                                 for rank, (idx, score) in enumerate(zip(top_user_idx_means, top_scores_user), 1):
                                     name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
                                     user_recs_means.append({"title": name, "score": f"{score:.2f} ⭐", "rank": rank, "movie_id": int(idx) + 1})
                                 render_movie_grid(user_recs_means, tmdb_key, cols_count=5)
 
-                                # --- Item-Based CF (Basic) ---
-                                temp_item_cf_basic = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors)
-                                temp_item_cf_basic.train_matrix = item_cf.train_matrix
-                                temp_item_cf_basic.similarity_matrix = item_cf.similarity_matrix
-                                preds_item_basic = temp_item_cf_basic.predict_batch(user_idx, unviewed_items)
-                                top_item_idx_basic = unviewed_items[np.argsort(preds_item_basic)[-top_k:][::-1]]
-                                top_scores_item = preds_item_basic[np.argsort(preds_item_basic)[-top_k:][::-1]]
+                                # --- Item-Based CF (Adj Cosine) ---
+                                temp_item_cf_adj = ItemBasedCollaborativeFiltering(k_neighbors=item_cf.k_neighbors)
+                                temp_item_cf_adj.train_matrix = item_cf.train_matrix
+                                temp_item_cf_adj.similarity_matrix = item_cf.adjusted_cosine_similarity_matrix
+                                preds_item_adj = temp_item_cf_adj.predict_batch(user_idx, unviewed_items)
+                                top_item_idx_adj = unviewed_items[np.argsort(preds_item_adj)[-top_k:][::-1]]
+                                top_scores_item = preds_item_adj[np.argsort(preds_item_adj)[-top_k:][::-1]]
 
-                                st.subheader(f"Kết quả gợi ý từ Item-Based CF (Basic) ({top_k} phim):")
-                                item_recs_basic = []
-                                for rank, (idx, score) in enumerate(zip(top_item_idx_basic, top_scores_item), 1):
+                                st.subheader(f"Kết quả gợi ý từ Item-Based CF (Adj Cosine) ({top_k} phim):")
+                                item_recs_adj = []
+                                for rank, (idx, score) in enumerate(zip(top_item_idx_adj, top_scores_item), 1):
                                     name = movie_titles.get(int(idx) + 1, f"Phim {idx+1}")
-                                    item_recs_basic.append({"title": name, "score": f"{score:.2f} ⭐", "rank": rank, "movie_id": int(idx) + 1})
-                                render_movie_grid(item_recs_basic, tmdb_key, cols_count=5)
+                                    item_recs_adj.append({"title": name, "score": f"{score:.2f} ⭐", "rank": rank, "movie_id": int(idx) + 1})
+                                render_movie_grid(item_recs_adj, tmdb_key, cols_count=5)
                                 
                             else:
                                 st.markdown("---")

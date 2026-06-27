@@ -167,7 +167,7 @@ python -m pytest tests/ -v
   - **Đánh giá film**: Tìm kiếm, chấm điểm phim mới và cập nhật trực tiếp vào hệ thống (cập nhật qua ma trận/SQL).
 - 👨‍💻 **Dành Cho Developer**: Không gian phân tích kỹ thuật chuyên sâu với 4 tab:
   - **Trực Quan Hóa Dữ Liệu**: Biểu đồ độ thưa thớt (Sparsity), hiện tượng Long-Tail, và không gian đặc trưng ẩn 2D của SVD (PCA).
-  - **Phân tích và Đánh giá Mô hình**: Đồ thị Training Loss của SVD và bảng so sánh MAE, RMSE, Precision@K, Recall@K, và Tốc độ dự đoán giữa các thuật toán. Bảng so sánh nay cung cấp cái nhìn đối sánh trực tiếp giữa các chuẩn khoảng cách: User-Based (Pearson vs Cosine), Item-Based (Adjusted Cosine vs Cosine), và SVD.
+  - **Phân tích và Đánh giá Mô hình**: Đồ thị Training Loss của SVD và bảng so sánh MAE, RMSE, Precision@K, Recall@K, Tốc độ dự đoán, và Thời gian Train (s) giữa các thuật toán. Bảng so sánh nay cung cấp cái nhìn đối sánh trực tiếp giữa các chuẩn khoảng cách: User-Based (Pearson vs Cosine), Item-Based (Adjusted Cosine vs Cosine), và SVD.
   - **So Sánh Thuật Toán**: So sánh song song top phim gợi ý từ các thuật toán khác nhau cho cùng một User, kèm theo giải thích chi tiết các bước thuật toán đã làm khi gợi ý phim:
     - **User-Based CF**: Trích xuất dữ liệu nền, tìm láng giềng tương đồng (những người dùng giống nhau), điều chỉnh sai số và tổng hợp thành dự đoán.
     - **Item-Based CF**: Đánh giá dựa trên độ tương đồng giữa các bộ phim, trích xuất ma trận con, và tính toán dự đoán từ các phim láng giềng.

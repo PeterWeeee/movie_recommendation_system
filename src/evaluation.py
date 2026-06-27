@@ -161,3 +161,41 @@ def compute_prediction_time(test_matrix: np.ndarray, model: Any) -> float:
     end_time = time.time()
     total_time = end_time - start_time
     return total_time / len(sample_users) if len(sample_users) > 0 else 0.0
+
+def compute_training_time(train_matrix: np.ndarray, model: Any, test_matrix: np.ndarray | None = None) -> float:
+    """
+    Đo thời gian huấn luyện (giây) của một mô hình.
+    Đối với SVD, nó đo thời gian chạy thuật toán tối ưu (fit).
+    Đối với CF, nó đo thời gian tính toán ma trận tương đồng (similarity) và khởi tạo mô hình (means/baseline).
+    """
+    import src.recommender
+    from src.similarity import compute_pearson_similarity, compute_cosine_similarity, compute_adjusted_cosine_similarity
+    
+    start_time = time.time()
+    
+    if isinstance(model, src.recommender.MatrixFactorizationSVD):
+        temp_model = src.recommender.MatrixFactorizationSVD(
+            num_factors=model.num_factors, lr=model.lr, reg=model.reg, epochs=model.epochs
+        )
+        temp_model.fit(train_matrix, test_matrix)
+        
+    elif isinstance(model, src.recommender.UserBasedCollaborativeFiltering):
+        temp_model = src.recommender.UserBasedCollaborativeFiltering(
+            k_neighbors=model.k_neighbors, prediction_mode=model.prediction_mode
+        )
+        if model.prediction_mode == 'basic':
+            sim = compute_cosine_similarity(train_matrix)
+        else:
+            sim = compute_pearson_similarity(train_matrix)
+        temp_model.fit(train_matrix, sim)
+        
+    elif isinstance(model, src.recommender.ItemBasedCollaborativeFiltering):
+        temp_model = src.recommender.ItemBasedCollaborativeFiltering(
+            k_neighbors=model.k_neighbors
+        )
+        # Kiểm tra xem mô hình hiện tại đang dùng cosine hay adjusted cosine (dựa trên tên hoặc logic)
+        # Để đơn giản, ta tính luôn Adjusted Cosine vì ItemBased thường dùng Adjusted Cosine.
+        sim = compute_adjusted_cosine_similarity(train_matrix)
+        temp_model.fit(train_matrix, sim)
+        
+    return time.time() - start_time
